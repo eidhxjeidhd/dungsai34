@@ -4,17 +4,18 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Kho lưu trữ các trang web được tạo ra tự động
+# Kho lưu trữ thông tin các trang web con được tạo ra tự động
 CREATED_SITES = {}
 USERS = {}
 
+# Giao diện Trang chủ & Trình Quản Lý / Tạo Web
 HOME_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trình Tạo Web Siêu Tốc Pro</title>
+    <title>Hệ Thống Web Tạo Web Pro</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { max-width: 650px; width: 100%; }
@@ -23,7 +24,7 @@ HOME_TEMPLATE = """
         input, textarea, select, button { width: 100%; padding: 14px; margin-top: 8px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
         textarea { resize: vertical; height: 120px; }
         button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #0369a1; transform: translateY(-2px); }
+        button:hover { background: #0369a1; }
         .btn-success { background: #16a34a; }
         .btn-success:hover { background: #15803d; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -35,7 +36,7 @@ HOME_TEMPLATE = """
     <div class="container">
         {% if not session.get('user') %}
             <div class="card">
-                <h2>🔐 Đăng Nhập / Đăng Ký Hệ Thống</h2>
+                <h2>🔐 Đăng Nhập Hệ Thống</h2>
                 <form method="POST" action="/auth">
                     <label>Tài khoản Gmail:</label>
                     <input type="email" name="email" placeholder="Nhập Gmail..." required>
@@ -59,23 +60,23 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h2>⚡ Tạo Web Công Khai Siêu Mạnh</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Nhập thông tin bên dưới, hệ thống sẽ xuất bản và chuyển hướng bạn thẳng đến trang web mới ngay lập tức!</p>
+                <h2>⚡ Xưởng Sản Xuất Web Tự Động</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Điền thông tin bên dưới, hệ thống sẽ tự viết code, xuất bản và chuyển hướng bạn thẳng đến trang web mới ngay lập tức!</p>
                 
                 <form method="POST" action="/create_site">
                     <label>Đường dẫn trang web (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="slug" placeholder="Ví dụ: shop-acc-vip, su-kien..." required>
+                    <input type="text" name="slug" placeholder="Ví dụ: shop-cua-toi, su-kien..." required>
                     
-                    <label>Tiêu đề trang (Title trên trình duyệt):</label>
-                    <input type="text" name="title" placeholder="Ví dụ: Shop Blox Fruit Giá Rẻ" required>
+                    <label>Tiêu đề trang (Title):</label>
+                    <input type="text" name="title" placeholder="Ví dụ: Shop Roblox Uy Tín" required>
 
                     <label>Tiêu đề chính (Heading H1):</label>
                     <input type="text" name="heading" placeholder="Ví dụ: Chào Mừng Đến Với Shop Của Tôi" required>
 
-                    <label>Nội dung chi tiết trang web:</label>
-                    <textarea name="content" placeholder="Nhập nội dung thông điệp, mô tả dịch vụ hoặc giới thiệu..." required></textarea>
+                    <label>Nội dung chi tiết trên web:</label>
+                    <textarea name="content" placeholder="Nhập nội dung, mô tả hoặc thông điệp của bạn..." required></textarea>
 
-                    <label>Phong cách giao diện:</label>
+                    <label>Chọn phong cách giao diện:</label>
                     <select name="theme">
                         <option value="modern">🌌 Tối Hiện Đại & Neon (Đẹp nhất)</option>
                         <option value="gaming">🎮 Phong Cách Gaming (Đỏ/Đen)</option>
@@ -87,12 +88,12 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h3>📋 Danh Sách Web Bạn Đã Tạo</h3>
+                <h3>📋 Danh Sách Các Web Đã Tạo</h3>
                 {% if my_sites %}
                     <table>
                         <tr>
                             <th>Tiêu đề</th>
-                            <th>Đường dẫn</th>
+                            <th>Đường dẫn công khai</th>
                             <th>Xóa</th>
                         </tr>
                         {% for s in my_sites %}
@@ -113,8 +114,8 @@ HOME_TEMPLATE = """
 </html>
 """
 
-# Template siêu mạnh với hiệu ứng cực chất cho các trang web được sinh ra
-STRONG_SITE_TEMPLATE = """
+# Khung code HTML tự động sinh ra khi có request tạo web
+DYNAMIC_SITE_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -125,8 +126,7 @@ STRONG_SITE_TEMPLATE = """
         body { 
             background: {% if theme == 'gaming' %}#1a0505{% elif theme == 'clean' %}#f1f5f9{% else %}#090d16{% endif %}; 
             color: {% if theme == 'clean' %}#1e293b{% else %}#f8fafc{% endif %}; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; 
+            font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; 
         }
         .main-box { 
             background: {% if theme == 'clean' %}#ffffff{% else %}rgba(30, 41, 59, 0.95)%}{% endif %}; 
@@ -136,7 +136,7 @@ STRONG_SITE_TEMPLATE = """
         }
         h1 { 
             color: {% if theme == 'gaming' %}#f87171{% elif theme == 'clean' %}#0284c7{% else %}#38bdf8{% endif %}; 
-            margin-top: 0; font-size: 32px; text-transform: uppercase; letter-spacing: 1px;
+            margin-top: 0; font-size: 30px; text-transform: uppercase;
         }
         .content-box { 
             background: {% if theme == 'clean' %}#f8fafc{% else %}#0f172a{% endif %}; 
@@ -158,7 +158,7 @@ STRONG_SITE_TEMPLATE = """
         <h1>{{ heading }}</h1>
         <div class="content-box">{{ content }}</div>
         <div class="footer">
-            Được xuất bản tự động bởi hệ thống Python Flask Web Builder.
+            Được sinh ra và xuất bản tự động bởi hệ thống Python Flask Web Builder.
         </div>
     </div>
 </body>
@@ -211,9 +211,9 @@ def create_site():
     theme = request.form.get('theme')
     
     if slug in CREATED_SITES:
-        return "Đường dẫn (Slug) này đã có người dùng! Vui lòng chọn tên khác.", 400
+        return "Đường dẫn (Slug) này đã tồn tại! Vui lòng chọn tên khác.", 400
         
-    # Lưu thông tin trang web mới
+    # Lưu thông tin trang web mới vào bộ nhớ hệ thống
     CREATED_SITES[slug] = {
         "owner": user,
         "title": title,
@@ -222,7 +222,7 @@ def create_site():
         "theme": theme
     }
     
-    # Tự động chuyển hướng thẳng đến trang web công khai vừa tạo xong!
+    # Tự động điều hướng trình duyệt sang trang web mới vừa xuất bản ngay lập tức!
     return redirect(url_for('view_site', slug=slug))
 
 @app.route('/site/<slug>')
@@ -230,7 +230,7 @@ def view_site(slug):
     if slug not in CREATED_SITES:
         return "Trang web này không tồn tại hoặc đã bị xóa!", 404
     site_data = CREATED_SITES[slug]
-    return render_template_string(STRONG_SITE_TEMPLATE, **site_data)
+    return render_template_string(DYNAMIC_SITE_TEMPLATE, **site_data)
 
 @app.route('/delete_site/<slug>')
 def delete_site(slug):
