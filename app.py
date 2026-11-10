@@ -11,7 +11,7 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 CLOUD_APPS = {}
 
-# Tài khoản admin ẩn giữ kín bên trong
+# Tài khoản admin ẩn bảo mật tuyệt đối
 USERS = {
     "admin": {"password": "123", "is_admin": True}
 }
