@@ -11,7 +11,7 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 CLOUD_APPS = {}
 
-# Khởi tạo tài khoản hệ thống, có sẵn tài khoản admin quyền lực
+# Tài khoản admin ẩn giữ kín bên trong
 USERS = {
     "admin": {"password": "123", "is_admin": True}
 }
@@ -113,7 +113,7 @@ HOME_TEMPLATE = """
             <div class="card">
                 <h2>🔐 Đăng Nhập Hệ Thống Cloud</h2>
                 <form method="POST" action="/auth">
-                    <label>Tài khoản (Admin gõ: admin / 123):</label>
+                    <label>Tài khoản:</label>
                     <input type="text" name="email" placeholder="Nhập tài khoản..." required>
                     <label>Mật khẩu:</label>
                     <input type="password" name="password" placeholder="Nhập mật khẩu..." required>
@@ -187,7 +187,6 @@ def index():
     user = session.get('user')
     if user:
         is_admin = USERS.get(user, {}).get("is_admin", False)
-        # Nếu là admin thì thấy toàn bộ app của tất cả mọi người, user thường chỉ thấy app của mình
         if is_admin:
             my_apps = CLOUD_APPS
         else:
@@ -271,7 +270,6 @@ def site_handler(slug, subpath):
     except Exception as e:
         return f"Lỗi thực thi mã nguồn: {str(e)}", 500
 
-# Tính năng độc quyền của Admin: Xem mã nguồn bất kỳ app nào
 @app.route('/admin/code/<slug>')
 def admin_view_code(slug):
     user = session.get('user')
@@ -318,7 +316,6 @@ def delete_app(slug):
         
     is_admin = USERS.get(user, {}).get("is_admin", False)
     
-    # Admin có quyền xóa bất kỳ app nào, user thường chỉ được xóa app của chính mình
     if slug in CLOUD_APPS and (is_admin or CLOUD_APPS[slug]['owner'] == user):
         try:
             shutil.rmtree(CLOUD_APPS[slug]['folder'], ignore_errors=True)
