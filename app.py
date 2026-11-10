@@ -1,5 +1,6 @@
 import os
 import importlib.util
+import shutil
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
 app = Flask(__name__)
@@ -11,11 +12,12 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 CLOUD_APPS = {}
 USERS = {}
 
-# Đoạn code mẫu chuẩn Cloud, có sẵn database SQLite độc lập cho từng shop
+# Đoạn code mẫu chuẩn chỉnh, sạch sẽ và có sẵn SQLite độc lập
 DEFAULT_ISOLATED_CODE = """import os
 import sqlite3
+from flask import render_template_string
 
-# File database SQLite riêng biệt nằm gọn trong thư mục của shop này
+# File database SQLite riêng biệt cho shop này
 DB_FILE = os.path.join(os.path.dirname(__file__), 'shop_database.db')
 
 def init_db():
@@ -27,12 +29,11 @@ def init_db():
 
 init_db()
 
-# Hàm xử lý chính khi có người truy cập vào shop
+# Hàm xử lý chính nhận request từ hệ thống cloud
 def handle_request(req):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     
-    # Xử lý thêm sản phẩm nếu có yêu cầu POST
     if req.method == 'POST':
         item_name = req.form.get('item_name')
         if item_name:
@@ -43,7 +44,6 @@ def handle_request(req):
     items = c.fetchall()
     conn.close()
     
-    # Giao diện HTML của shop
     html = '''
     <!DOCTYPE html>
     <html lang="vi">
@@ -96,9 +96,9 @@ HOME_TEMPLATE = """
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
         input, textarea, button { width: 100%; padding: 14px; margin-top: 8px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 15px; }
         textarea { resize: vertical; height: 320px; font-family: monospace; font-size: 13px; color: #38bdf8; }
-        button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #0369a1; }
-        .btn-success { background: #16a34a; }
+        button, .btn-link { display: inline-block; text-align: center; background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; text-decoration: none; color: #fff; padding: 10px 15px; border-radius: 8px; }
+        button:hover, .btn-link:hover { background: #0369a1; }
+        .btn-success { background: #16a34a; width: 100%; padding: 14px; border-radius: 10px; }
         .btn-success:hover { background: #15803d; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
@@ -116,8 +116,8 @@ HOME_TEMPLATE = """
                     <label>Mật khẩu:</label>
                     <input type="password" name="password" placeholder="Nhập mật khẩu..." required>
                     <div style="display: flex; gap: 10px;">
-                        <button type="submit" name="action" value="login" class="btn-success" style="flex: 1;">Đăng Nhập</button>
-                        <button type="submit" name="action" value="register" style="flex: 1;">Đăng Ký</button>
+                        <button type="submit" name="action" value="login" class="btn-success" style="flex: 1; margin:0;">Đăng Nhập</button>
+                        <button type="submit" name="action" value="register" style="flex: 1; margin:0; background:#0284c7;">Đăng Ký</button>
                     </div>
                 </form>
                 {% if error %}
@@ -159,10 +159,10 @@ HOME_TEMPLATE = """
                         {% for slug, info in my_apps.items() %}
                         <tr>
                             <td><b>{{ slug }}</b></td>
-                            <td><span style="color: #4ade80;">● Hoạt động 24/7 (Độc lập DB)</span></td>
+                            <td><span style="color: #4ade80;">● Hoạt động 24/7</span></td>
                             <td>
-                                <a href="/site/{{ slug }}/" target="_blank" style="color: #38bdf8; margin-right: 10px;">Mở Web</a>
-                                <a href="/delete/{{ slug }}" style="color: #f87171; text-decoration: none;">Xóa</a>
+                                <a href="/site/{{ slug }}/" target="_blank" class="btn-link" style="background: #0284c7; margin-right: 5px;">Mở Web</a>
+                                <a href="/delete/{{ slug }}" class="btn-link" style="background: #ef4444;">Xóa</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -219,10 +219,9 @@ def deploy():
     slug = request.form.get('slug').strip().lower()
     py_code = request.form.get('py_code')
     
-    if slug in CLOUD_APPS:
-        return "Tên đường dẫn này đã tồn tại! Vui lòng chọn tên khác.", 400
+    if not slug:
+        return "Tên đường dẫn không được để trống!", 400
         
-    # Tạo thư mục riêng cho từng shop (cách ly hoàn toàn mã nguồn và database)
     proj_folder = os.path.join(PROJECTS_DIR, slug)
     os.makedirs(proj_folder, exist_ok=True)
     
@@ -233,25 +232,32 @@ def deploy():
     CLOUD_APPS[slug] = {"owner": user, "path": file_path, "folder": proj_folder}
     return redirect(url_for('index'))
 
-# Điều phối request tới app con độc lập mà không cần mở port rườm rà
+@app.route('/site/')
+@app.route('/site')
+def site_index_redirect():
+    return redirect(url_for('index'))
+
 @app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def site_handler(slug, subpath):
     if slug not in CLOUD_APPS:
-        return "Trang web cloud không tồn tại!", 404
+        return "Trang web cloud không tồn tại hoặc đã bị xóa!", 404
         
     file_path = CLOUD_APPS[slug]['path']
     try:
-        # Nạp động module Python của riêng project đó vào lúc có người truy cập
         spec = importlib.util.spec_from_file_location(f"project_{slug}", file_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         
-        # Gọi hàm handle_request đã được định nghĩa trong code của user
+        # Kiểm tra linh hoạt các hàm hiển thị trong code của user
         if hasattr(mod, 'handle_request'):
             return mod.handle_request(request)
+        elif hasattr(mod, 'index'):
+            return mod.index()
+        elif hasattr(mod, 'HTML_CODE'):
+            return render_template_string(mod.HTML_CODE)
         else:
-            return "Lỗi: Code Python phải có hàm handle_request(req) để xử lý dữ liệu!", 500
+            return "Lỗi: Code Python phải có hàm handle_request(req), hàm index(), hoặc biến HTML_CODE!", 500
     except Exception as e:
         return f"Lỗi thực thi mã nguồn: {str(e)}", 500
 
@@ -260,8 +266,6 @@ def delete_app(slug):
     user = session.get('user')
     if slug in CLOUD_APPS and CLOUD_APPS[slug]['owner'] == user:
         try:
-            # Xóa sạch thư mục chứa code và database riêng của shop đó
-            import shutil
             shutil.rmtree(CLOUD_APPS[slug]['folder'], ignore_errors=True)
         except:
             pass
