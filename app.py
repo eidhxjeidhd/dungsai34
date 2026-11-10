@@ -1,45 +1,99 @@
 import os
-from flask import Flask, render_template_string, request, redirect, url_for, session
+import subprocess
+import sys
+import requests
+from flask import Flask, render_template_string, request, redirect, url_for, session, Response
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Thư mục lưu trữ mã nguồn trên Cloud
-CLOUD_STORAGE = "cloud_projects"
-os.makedirs(CLOUD_STORAGE, exist_ok=True)
+# Thư mục chứa các project độc lập
+PROJECTS_DIR = "mini_render_projects"
+os.makedirs(PROJECTS_DIR, exist_ok=True)
 
-CLOUD_APPS = {}
+# Quản lý tiến trình và cổng của các app con
+RUNNING_APPS = {} # {slug: {"port": 8001, "process": process, "owner": user}}
 USERS = {}
+NEXT_PORT = 8001  # Cổng bắt đầu cho các app con
 
-# Đoạn code Python mẫu chuẩn để sẵn trong ô cho người dùng sửa hoặc copy
-DEFAULT_CLOUD_CODE = '''# Viết mã Python xử lý giao diện cho shop của bạn ở đây
-# Bạn có thể thay đổi trực tiếp chuỗi HTML_CODE bên dưới theo ý muốn
+# Đoạn code mẫu chuẩn có sẵn database SQLite độc lập cho từng shop
+DEFAULT_RENDER_CODE = """import os
+from flask import Flask, render_template_string, request, redirect, url_for
+import sqlite3
 
-HTML_CODE = """
+app = Flask(__name__)
+
+# Tạo database SQLite riêng biệt cho từng shop
+DB_NAME = 'shop_data.db'
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Shop Của Tôi Trên Cloud</title>
+    <title>Mini-Render Shop</title>
     <style>
-        body { background: #090d16; color: #fff; font-family: sans-serif; text-align: center; padding: 50px; }
-        .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        h1 { color: #38bdf8; }
-        p { color: #94a3b8; }
+        body { background: #090d16; color: #fff; font-family: sans-serif; text-align: center; padding: 40px; }
+        .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; width: 100%; max-width: 400px; box-sizing: border-box; }
+        input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
+        button { background: #16a34a; font-weight: bold; border: none; cursor: pointer; }
+        ul { list-style: none; padding: 0; text-align: left; margin-top: 20px; }
+        li { background: #0f172a; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #334155; }
     </style>
 </head>
 <body>
     <div class="box">
-        <h1>🚀 Chào Mừng Đến Với Shop Của Tôi!</h1>
-        <p>Trang web này chạy động bằng mã Python trên hệ thống Cloud 24/7.</p>
+        <h2 style="color: #38bdf8;">🛍️ Shop Độc Lập Trên Cloud</h2>
+        <form method="POST" action="/add">
+            <input type="text" name="item_name" placeholder="Nhập tên sản phẩm..." required>
+            <button type="submit">Thêm Vào Database</button>
+        </form>
+        <h3>Danh Sách Đã Lưu:</h3>
+        <ul>
+            {% for item in items %}
+                <li>📦 {{ item[1] }}</li>
+            {% endfor %}
+        </ul>
     </div>
 </body>
 </html>
-"""
-
-def render_page():
-    return HTML_CODE
 '''
+
+@app.route('/')
+def index():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM items")
+    items = c.fetchall()
+    conn.close()
+    return render_template_string(HTML_TEMPLATE, items=items)
+
+@app.route('/add', methods=['POST'])
+def add():
+    item_name = request.form.get('item_name')
+    if item_name:
+        conn = sqlite3.connect(DB_NAME)
+        c = conn.cursor()
+        c.execute("INSERT INTO items (name) VALUES (?)", (item_name,))
+        conn.commit()
+        conn.close()
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    # App con sẽ chạy trên cổng được hệ thống cấp tự động
+    import sys
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
+    app.run(host='0.0.0.0', port=port)
+"""
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -47,7 +101,7 @@ HOME_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Cloud Python Tự Động</title>
+    <title>Hệ Thống Mini-Render Cloud</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { max-width: 800px; width: 100%; }
@@ -68,7 +122,7 @@ HOME_TEMPLATE = """
     <div class="container">
         {% if not session.get('user') %}
             <div class="card">
-                <h2>🔐 Đăng Nhập Hệ Thống Cloud</h2>
+                <h2>🔐 Đăng Nhập Mini-Render</h2>
                 <form method="POST" action="/auth">
                     <label>Tài khoản:</label>
                     <input type="email" name="email" placeholder="Nhập email..." required>
@@ -92,42 +146,44 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h2>☁️ Trình Triển Khai Code Python Lên Cloud</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Chỉnh sửa code Python mẫu bên dưới theo ý bạn, đặt tên đường dẫn và bấm xuất bản để nhận link công khai 24/7!</p>
+                <h2>🚀 Triển Khai App/Shop Độc Lập (Mini-Render)</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Dán code Python có kèm database SQLite vào đây. Hệ thống sẽ tự dựng tiến trình ngầm riêng biệt!</p>
                 
-                <form method="POST" action="/deploy_cloud">
-                    <label>Tên Đường Dẫn (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="slug" placeholder="Ví dụ: shop-cua-toi..." required>
+                <form method="POST" action="/deploy">
+                    <label>Tên Slug (Viết liền không dấu):</label>
+                    <input type="text" name="slug" placeholder="Ví dụ: shopgame..." required>
                     
-                    <label>Mã nguồn Python (.py) - Có sẵn mẫu để sửa:</label>
+                    <label>Mã nguồn Python (.py):</label>
                     <textarea name="py_code" required>{{ default_code }}</textarea>
 
-                    <button type="submit" class="btn-success">🚀 Xuất Bản Lên Cloud Ngay</button>
+                    <button type="submit" class="btn-success">⚡ Build & Deploy App</button>
                 </form>
             </div>
 
             <div class="card">
-                <h3>📋 Danh Sách Các App Đã Lên Cloud</h3>
+                <h3>📋 Danh Sách App Đang Chạy Ngầm</h3>
                 {% if my_apps %}
                     <table>
                         <tr>
-                            <th>Đường dẫn (Slug)</th>
-                            <th>Trạng thái Cloud</th>
+                            <th>Slug</th>
+                            <th>Cổng Nội Bộ</th>
+                            <th>Trạng thái</th>
                             <th>Hành động</th>
                         </tr>
                         {% for slug, info in my_apps.items() %}
                         <tr>
                             <td><b>{{ slug }}</b></td>
-                            <td><span style="color: #4ade80;">● Hoạt động 24/7</span></td>
+                            <td>{{ info.port }}</td>
+                            <td><span style="color: #4ade80;">● Đang chạy 24/7</span></td>
                             <td>
                                 <a href="/site/{{ slug }}/" target="_blank" style="color: #38bdf8; margin-right: 10px;">Mở Link Cloud</a>
-                                <a href="/delete/{{ slug }}" style="color: #f87171; text-decoration: none;">Xóa</a>
+                                <a href="/delete/{{ slug }}" style="color: #f87171; text-decoration: none;">Tắt/Xóa</a>
                             </td>
                         </tr>
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có ứng dụng nào được xuất bản lên cloud.</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có app nào được deploy.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -136,16 +192,15 @@ HOME_TEMPLATE = """
 </html>
 """
 
-# Tài khoản mặc định để test nhanh
 USERS["admin@gmail.com"] = {"password": "adminpassword123"}
 
 @app.route('/')
 def index():
     user = session.get('user')
     if user:
-        my_apps = {slug: data for slug, data in CLOUD_APPS.items() if data['owner'] == user}
-        return render_template_string(HOME_TEMPLATE, my_apps=my_apps, default_code=DEFAULT_CLOUD_CODE)
-    return render_template_string(HOME_TEMPLATE, default_code=DEFAULT_CLOUD_CODE)
+        my_apps = {slug: data for slug, data in RUNNING_APPS.items() if data['owner'] == user}
+        return render_template_string(HOME_TEMPLATE, my_apps=my_apps, default_code=DEFAULT_RENDER_CODE)
+    return render_template_string(HOME_TEMPLATE, default_code=DEFAULT_RENDER_CODE)
 
 @app.route('/auth', methods=['POST'])
 def auth():
@@ -155,14 +210,14 @@ def auth():
     
     if action == 'register':
         if email in USERS:
-            return render_template_string(HOME_TEMPLATE, error="Email đã tồn tại!", default_code=DEFAULT_CLOUD_CODE)
+            return render_template_string(HOME_TEMPLATE, error="Email đã tồn tại!", default_code=DEFAULT_RENDER_CODE)
         USERS[email] = {"password": password}
         session['user'] = email
     elif action == 'login':
         if email in USERS and USERS[email]["password"] == password:
             session['user'] = email
         else:
-            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!", default_code=DEFAULT_CLOUD_CODE)
+            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!", default_code=DEFAULT_RENDER_CODE)
     return redirect(url_for('index'))
 
 @app.route('/logout')
@@ -170,8 +225,9 @@ def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
 
-@app.route('/deploy_cloud', methods=['POST'])
-def deploy_cloud():
+@app.route('/deploy', methods=['POST'])
+def deploy():
+    global NEXT_PORT
     user = session.get('user')
     if not user:
         return redirect(url_for('index'))
@@ -179,50 +235,69 @@ def deploy_cloud():
     slug = request.form.get('slug').strip().lower()
     py_code = request.form.get('py_code')
     
-    if slug in CLOUD_APPS:
-        return "Tên đường dẫn này đã tồn tại trên cloud! Hãy chọn tên khác.", 400
+    if slug in RUNNING_APPS:
+        return "Slug này đã tồn tại! Vui lòng chọn tên khác.", 400
         
-    file_path = os.path.join(CLOUD_STORAGE, f"{slug}.py")
+    # Tạo thư mục riêng cho từng project (giống như clone repo trên Render)
+    proj_folder = os.path.join(PROJECTS_DIR, slug)
+    os.makedirs(proj_folder, exist_ok=True)
+    
+    file_path = os.path.join(proj_folder, "main.py")
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(py_code)
         
-    CLOUD_APPS[slug] = {"owner": user, "path": file_path}
+    port = NEXT_PORT
+    NEXT_PORT += 1
+    
+    try:
+        # Khởi chạy tiến trình Python ngầm độc lập, truyền port vào tham số
+        process = subprocess.Popen([sys.executable, file_path, str(port)], cwd=proj_folder)
+        RUNNING_APPS[slug] = {
+            "owner": user,
+            "port": port,
+            "process": process
+        }
+    except Exception as e:
+        return f"Lỗi khởi chạy tiến trình: {str(e)}", 500
+        
     return redirect(url_for('index'))
 
-# Route tổng để điều phối và thực thi code Python của từng app con
-@app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST'])
-@app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST'])
-def render_cloud_site(slug, subpath):
-    if slug not in CLOUD_APPS:
-        return "Trang web cloud không tồn tại hoặc đã bị xóa!", 404
+# Cổng Proxy Trung Tâm: Nhận request và chuyển tiếp ngầm tới app con tương ứng
+@app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def proxy_handler(slug, subpath):
+    if slug not in RUNNING_APPS:
+        return "Ứng dụng không tồn tại hoặc đã bị tắt!", 404
         
-    file_path = CLOUD_APPS[slug]['path']
+    port = RUNNING_APPS[slug]['port']
+    target_url = f"http://127.0.0.1:{port}/{subpath}"
+    
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            code_content = f.read()
+        # Thực hiện chuyển tiếp request thông qua thư viện requests ngầm
+        if request.method == 'GET':
+            resp = requests.get(target_url, params=request.args, cookies=request.cookies, allow_redirects=False)
+        elif request.method == 'POST':
+            resp = requests.post(target_url, data=request.form, files=request.files, cookies=request.cookies, allow_redirects=False)
+        else:
+            resp = requests.request(request.method, target_url, data=request.form, cookies=request.cookies, allow_redirects=False)
             
-        local_vars = {}
-        exec(code_content, local_vars)
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers = [(name, value) for name, value in resp.raw.headers.items() if name.lower() not in excluded_headers]
         
-        # Gọi hàm render_page() từ code Python của user để trả về giao diện
-        if 'render_page' in local_vars:
-            return local_vars['render_page']()
-        elif 'HTML_CODE' in local_vars:
-            return render_template_string(local_vars['HTML_CODE'])
-            
-        return "Ứng dụng Python đã chạy nhưng chưa cung cấp hàm render_page() hợp lệ.", 200
+        return Response(resp.content, resp.status_code, headers)
     except Exception as e:
-        return f"Lỗi thực thi mã nguồn Python: {str(e)}", 500
+        return f"Đang khởi động hoặc app con gặp sự cố: {str(e)}", 502
 
 @app.route('/delete/<slug>')
 def delete_app(slug):
     user = session.get('user')
-    if slug in CLOUD_APPS and CLOUD_APPS[slug]['owner'] == user:
+    if slug in RUNNING_APPS and RUNNING_APPS[slug]['owner'] == user:
         try:
-            os.remove(CLOUD_APPS[slug]['path'])
+            RUNNING_APPS[slug]['process.terminate']() # Tắt tiến trình ngầm
+            RUNNING_APPS[slug]['process'].kill()
         except:
             pass
-        del CLOUD_APPS[slug]
+        del RUNNING_APPS[slug]
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
