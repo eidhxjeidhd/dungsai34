@@ -60,13 +60,13 @@ HTML_TEMPLATE = """
                         <tr>
                             <th>Email</th>
                             <th>Số câu hỏi</th>
-                            <th>Xem thói quen</th>
+                            <th>Xem chi tiết</th>
                         </tr>
                         {% for u in users_list %}
                         <tr>
                             <td>{{ u.email }}</td>
                             <td>{{ u.questions|length }} câu</td>
-                            <td><a href="/admin/view/{{ u.email }}" style="color: #38bdf8; text-decoration: none;">Xem chi tiết</a></td>
+                            <td><a href="/admin/view/{{ u.email }}" style="color: #38bdf8; text-decoration: none;">Xem thói quen</a></td>
                         </tr>
                         {% endfor %}
                     </table>
@@ -84,53 +84,54 @@ HTML_TEMPLATE = """
 
             <div class="card">
                 <h2>🔗 Link Thử Thách Của Bạn</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Sao chép link này gửi cho bạn bè:</p>
                 <div class="link-box">{{ base_url }}/play/{{ session.get('user') }}</div>
 
-                <h3>✍️ Thêm Câu Hỏi Tùy Chỉnh (Đã tạo: {{ questions|length }}/10 câu)</h3>
-                <p style="color: #94a3b8; font-size: 13px;">Bạn có thể tạo tối đa 10 câu.</p>
-                
+                <h3>✍️ Thêm Câu Hỏi (Đã tạo: {{ questions|length }}/10 câu)</h3>
                 {% if questions|length < 10 %}
                 <form method="POST" action="/add_question">
                     <label>Câu hỏi thói quen:</label>
-                    <input type="text" name="question" placeholder="Ví dụ: Tôi hay dùng ốp điện thoại màu gì?" required>
+                    <input type="text" name="question" placeholder="Ví dụ: Tôi hay dùng ốp màu gì?" required>
                     <label style="color: #34d399;">Đáp án đúng (Thật lòng):</label>
-                    <input type="text" name="correct" placeholder="Ví dụ: Ốp màu trắng" required>
-                    <label style="color: #f87171;">Đáp án sai 1 (Na ná):</label>
-                    <input type="text" name="wrong1" placeholder="Ví dụ: Ốp màu đen" required>
-                    <label style="color: #f87171;">Đáp án sai 2 (Na ná):</label>
-                    <input type="text" name="wrong2" placeholder="Ví dụ: Ốp màu trong suốt" required>
-                    <label style="color: #f87171;">Đáp án sai 3 (Na ná):</label>
+                    <input type="text" name="correct" placeholder="Ví dụ: Ốp trắng" required>
+                    <label style="color: #f87171;">Đáp án sai 1:</label>
+                    <input type="text" name="wrong1" placeholder="Ví dụ: Ốp đen" required>
+                    <label style="color: #f87171;">Đáp án sai 2:</label>
+                    <input type="text" name="wrong2" placeholder="Ví dụ: Ốp trong suốt" required>
+                    <label style="color: #f87171;">Đáp án sai 3:</label>
                     <input type="text" name="wrong3" placeholder="Ví dụ: Không dùng ốp" required>
-                    <button type="submit" class="btn-success">Thêm Câu Này Vào Link</button>
+                    <button type="submit" class="btn-success">Thêm Câu Hỏi</button>
                 </form>
                 {% else %}
-                <p style="color: #facc15; text-align: center;">Bạn đã đạt giới hạn tối đa 10 câu hỏi!</p>
+                <p style="color: #facc15; text-align: center;">Đã đạt giới hạn tối đa 10 câu!</p>
                 {% endif %}
             </div>
 
+            <!-- BẢNG DANH SÁCH NGƯỜI CHƠI ĐÃ THAM GIA -->
             <div class="card">
-                <h3>📋 Danh Sách Câu Hỏi Đã Tạo ({{ questions|length }})</h3>
-                {% if questions %}
+                <h3>📊 Nhật Ký Bạn Bè Đã Trả Lời</h3>
+                {% if history %}
                     <table>
                         <tr>
-                            <th>STT</th>
-                            <th>Câu hỏi & Đáp án đúng</th>
-                            <th>Xóa</th>
+                            <th>Tên / Người chơi</th>
+                            <th>Điểm số</th>
+                            <th>Trạng thái</th>
                         </tr>
-                        {% for q in questions %}
+                        {% for h in history %}
                         <tr>
-                            <td>{{ loop.index }}</td>
+                            <td><b>{{ h.name }}</b></td>
+                            <td>{{ h.score }}% ({{ h.correct }}/{{ h.total }})</td>
                             <td>
-                                <b>Q: {{ q.q }}</b><br>
-                                <span style="color: #34d399;">✔ Đúng: {{ q.correct }}</span>
+                                {% if h.cheated %}
+                                    <span style="color: #f87171; font-weight: bold;">⚠ Gian lận (Làm lại)</span>
+                                {% else %}
+                                    <span style="color: #34d399;">Hợp lệ</span>
+                                {% endif %}
                             </td>
-                            <td><a href="/delete_q/{{ loop.index0 }}" style="color: #f87171; text-decoration: none;">Xóa</a></td>
                         </tr>
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có câu hỏi nào.</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có ai chơi thử link của bạn.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -153,7 +154,8 @@ PLAY_TEMPLATE = """
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
         .radio-label { display: block; background: #0f172a; padding: 10px; margin-top: 8px; border-radius: 6px; border: 1px solid #475569; cursor: pointer; }
         .radio-label:hover { background: #1e293b; border-color: #38bdf8; }
-        button { width: 100%; padding: 12px; margin-top: 15px; border-radius: 8px; border: none; background: #16a34a; color: #fff; font-weight: bold; cursor: pointer; font-size: 16px; }
+        input[type="text"], button { width: 100%; padding: 12px; margin-top: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        button { background: #16a34a; font-weight: bold; border: none; cursor: pointer; }
         button:hover { background: #15803d; }
     </style>
 </head>
@@ -161,12 +163,14 @@ PLAY_TEMPLATE = """
     <div class="container">
         <div class="card">
             <h2>🎯 Thử Thách Thói Quen Của: <span style="color: #facc15;">{{ owner }}</span></h2>
-            <p style="text-align: center; color: #94a3b8; font-size: 14px;">Bài kiểm tra gồm có <b>{{ quiz_data|length }} câu hỏi</b>.</p>
             
             {% if not result_checked %}
-                <form method="POST">
+                <form method="POST" id="quizForm">
+                    <label><b>Nhập tên của bạn để bắt đầu chơi:</b></label>
+                    <input type="text" name="player_name" placeholder="Ví dụ: Văn A..." required>
+                    
                     {% for item in quiz_data %}
-                        <div style="margin-bottom: 20px;">
+                        <div style="margin-bottom: 20px; margin-top: 15px;">
                             <label><b>Câu {{ loop.index }}:</b> {{ item.q }}</label>
                             {% for opt in item.options %}
                                 <label class="radio-label">
@@ -175,16 +179,35 @@ PLAY_TEMPLATE = """
                             {% endfor %}
                         </div>
                     {% endfor %}
+                    <!-- Trường ẩn để ghi nhận gian lận nếu bấm làm lại/quay lại -->
+                    <input type="hidden" name="cheated" id="cheatedInput" value="0">
                     <button type="submit">Kiểm Tra Độ Thật Lòng</button>
                 </form>
+
+                <script>
+                    // Kiểm tra nếu người chơi đã từng làm trước đó trong trình duyệt này mà bấm quay lại / làm lại
+                    window.addEventListener('pageshow', function(event) {
+                        if (sessionStorage.getItem("played_{{ owner }}")) {
+                            document.getElementById("cheatedInput").value = "1";
+                        }
+                    });
+                    document.getElementById("quizForm").addEventListener("submit", function() {
+                        sessionStorage.setItem("played_{{ owner }}", "true");
+                    });
+                </script>
             {% else %}
                 <div style="text-align: center;">
                     <h3>Kết Quả Đánh Giá</h3>
                     <p style="font-size: 20px; color: {% if score == 100 %}#34d399{% else %}#f87171{% endif %};">
-                        Độ thật lòng / Hiểu nhau: <b>{{ score }}%</b> (Đúng {{ correct_count }}/{{ total_questions }} câu)
+                        Độ thật lòng: <b>{{ score }}%</b> (Đúng {{ correct_count }}/{{ total_questions }} câu)
                     </p>
+                    {% if cheated %}
+                        <p style="color: #f87171; font-weight: bold;">⚠ Phát hiện gian lận: Bạn đã bấm quay lại hoặc làm lại bài kiểm tra!</p>
+                    {% else %}
+                        <p style="color: #34d399;">Bài làm hợp lệ, không gian lận!</p>
+                    {% endif %}
                     <p style="color: #94a3b8;">{{ message }}</p>
-                    <a href="/play/{{ owner }}"><button style="background: #0284c7; margin-top: 15px;">Làm Lại Thử Thách</button></a>
+                    <a href="/play/{{ owner }}"><button style="background: #0284c7; margin-top: 15px;">Chơi Lại (Sẽ bị tính là gian lận)</button></a>
                 </div>
             {% endif %}
         </div>
@@ -239,7 +262,7 @@ ADMIN_VIEW_TEMPLATE = """
 </html>
 """
 
-USERS["admin@gmail.com"] = {"password": "adminpassword123", "questions": []}
+USERS["admin@gmail.com"] = {"password": "adminpassword123", "questions": [], "history": []}
 
 @app.route('/')
 def index():
@@ -249,8 +272,9 @@ def index():
         return render_template_string(HTML_TEMPLATE, users_list=users_list)
     elif user:
         questions = USERS[user]["questions"]
+        history = USERS[user].get("history", [])
         base_url = request.host_url.rstrip('/')
-        return render_template_string(HTML_TEMPLATE, questions=questions, base_url=base_url)
+        return render_template_string(HTML_TEMPLATE, questions=questions, history=history, base_url=base_url)
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/auth', methods=['POST'])
@@ -262,7 +286,7 @@ def auth():
     if action == 'register':
         if email in USERS:
             return render_template_string(HTML_TEMPLATE, error="Email này đã tồn tại!")
-        USERS[email] = {"password": password, "questions": []}
+        USERS[email] = {"password": password, "questions": [], "history": []}
         session['user'] = email
     elif action == 'login':
         if email in USERS and USERS[email]["password"] == password:
@@ -315,6 +339,9 @@ def play(email):
         quiz_data.append({"index": i, "q": q["q"], "options": options, "correct": q["correct"]})
         
     if request.method == 'POST':
+        player_name = request.form.get('player_name', 'Ẩn danh').strip()
+        cheated = request.form.get('cheated') == '1'
+        
         correct_count = 0
         total = len(questions)
         for item in quiz_data:
@@ -328,9 +355,20 @@ def play(email):
         elif score >= 50:
             message = "Cũng tạm ổn, nhưng vẫn có điểm gian dối lấp ló đâu đây!"
         else:
-            message = "Giả dối quá! Đoán sai bét nhè các câu trả lời mẹo rồi, bấm làm lại ngay đi!"
+            message = "Giả dối quá! Đoán sai bét nhè các câu trả lời mẹo rồi!"
             
-        return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=True, score=score, correct_count=correct_count, total_questions=total, message=message)
+        # Lưu kết quả vào lịch sử của chủ link
+        if "history" not in USERS[email]:
+            USERS[email]["history"] = []
+        USERS[email]["history"].insert(0, {
+            "name": player_name,
+            "score": score,
+            "correct": correct_count,
+            "total": total,
+            "cheated": cheated
+        })
+            
+        return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=True, score=score, correct_count=correct_count, total_questions=total, cheated=cheated, message=message)
         
     return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=False)
 
