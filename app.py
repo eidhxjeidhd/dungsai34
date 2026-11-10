@@ -1,6 +1,7 @@
 import os
 import importlib.util
 import shutil
+import re
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
 app = Flask(__name__)
@@ -11,12 +12,12 @@ os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 CLOUD_APPS = {}
 
-# Tài khoản admin ẩn bảo mật tuyệt đối
+# Tài khoản admin quản lý hệ thống
 USERS = {
     "admin": {"password": "123", "is_admin": True}
 }
 
-# Code mẫu mặc định an toàn tuyệt đối, không dính lỗi f-string
+# Code mẫu chuẩn chỉnh, an toàn cho app con
 DEFAULT_ISOLATED_CODE = """import os
 import sqlite3
 from flask import render_template_string
@@ -51,7 +52,7 @@ def handle_request(req):
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
-        <title>Shop Cloud Độc Lập</title>
+        <title>App Độc Lập Trên Cloud</title>
         <style>
             body { background: #090d16; color: #fff; font-family: sans-serif; text-align: center; padding: 40px; }
             .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; width: 100%; max-width: 400px; box-sizing: border-box; text-align: left; }
@@ -64,13 +65,13 @@ def handle_request(req):
     <body>
         <div style="display: flex; justify-content: center;">
             <div class="box">
-                <h2 style="color: #38bdf8; text-align: center; margin-top: 0;">🛍️ Shop Của Tôi</h2>
+                <h2 style="color: #38bdf8; text-align: center; margin-top: 0;">🛍️ App Của Tôi</h2>
                 <form method="POST">
-                    <label>Tên sản phẩm / tài khoản:</label>
-                    <input type="text" name="item_name" placeholder="Nhập vào đây..." required>
-                    <button type="submit">Lưu Vào Database Riêng</button>
+                    <label>Nhập nội dung:</label>
+                    <input type="text" name="item_name" placeholder="Ghi chú gì đó..." required>
+                    <button type="submit">Lưu Vào Database</button>
                 </form>
-                <h3 style="margin-bottom: 5px;">Kho Dữ Liệu:</h3>
+                <h3 style="margin-bottom: 5px;">Dữ Liệu Đã Lưu:</h3>
                 <ul>
                     {% for item in items %}
                         <li>📦 {{ item[1] }}</li>
@@ -90,7 +91,7 @@ HOME_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Cloud Python Độc Lập</title>
+    <title>Hệ Thống Cloud Tạo App Tự Động</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { max-width: 850px; width: 100%; }
@@ -112,7 +113,7 @@ HOME_TEMPLATE = """
     <div class="container">
         {% if not session.get('user') %}
             <div class="card">
-                <h2>🔐 Đăng Nhập Hệ Thống Cloud</h2>
+                <h2>🔐 Đăng Nhập Cloud Platform</h2>
                 <form method="POST" action="/auth">
                     <label>Tài khoản:</label>
                     <input type="text" name="email" placeholder="Nhập tài khoản..." required>
@@ -130,41 +131,41 @@ HOME_TEMPLATE = """
         {% else %}
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>👤 Tài khoản: <b>{{ session.get('user') }}</b> {% if is_admin %}<span class="badge-admin">SUPER ADMIN</span>{% endif %}</span>
+                    <span>👤 Tài khoản: <b>{{ session.get('user') }}</b> {% if is_admin %}<span class="badge-admin">ADMIN</span>{% endif %}</span>
                     <a href="/logout" style="color: #f87171; text-decoration: none; font-size: 14px;">Đăng xuất</a>
                 </div>
             </div>
 
             <div class="card">
-                <h2>⚡ Triển Khai Shop/App Lên Cloud</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Dán code Python có tích hợp SQLite mẫu bên dưới, đặt tên đường dẫn và bấm xuất bản!</p>
+                <h2>⚡ Tạo & Triển Khai App Mới Lên Cloud</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Dán mã nguồn Python tích hợp SQLite vào đây, đặt tên đường dẫn và bấm xuất bản!</p>
                 
                 <form method="POST" action="/deploy">
                     <label>Tên Đường Dẫn (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="slug" placeholder="Ví dụ: shopgamecua-toi..." required>
+                    <input type="text" name="slug" placeholder="Ví dụ: shopcua-toi..." required>
                     
-                    <label>Mã nguồn Python (.py) - Có sẵn mẫu:</label>
+                    <label>Mã nguồn Python (.py):</label>
                     <textarea name="py_code" required>{{ default_code }}</textarea>
 
-                    <button type="submit" class="btn-success">🚀 Xuất Bản Lên Cloud Ngay</button>
+                    <button type="submit" class="btn-success">🚀 Xuất Bản App Lên Cloud</button>
                 </form>
             </div>
 
             <div class="card">
-                <h3>📋 {% if is_admin %}👑 Quản Trị Viên Toàn Bộ Hệ Thống{% else %}📋 Danh Sách App Của Bạn{% endif %}</h3>
+                <h3>📋 Danh Sách Các App Đang Hoạt Động</h3>
                 {% if my_apps %}
                     <table>
                         <tr>
                             <th>Đường dẫn (Slug)</th>
                             {% if is_admin %}<th>Chủ sở hữu</th>{% endif %}
-                            <th>Hành động quản lý</th>
+                            <th>Thao tác</th>
                         </tr>
                         {% for slug, info in my_apps.items() %}
                         <tr>
                             <td><b>{{ slug }}</b></td>
                             {% if is_admin %}<td><span style="color: #38bdf8;">{{ info.owner }}</span></td>{% endif %}
                             <td>
-                                <a href="/site/{{ slug }}/" target="_blank" class="btn-link" style="background: #0284c7;">Mở Web</a>
+                                <a href="/site/{{ slug }}/" target="_blank" class="btn-link" style="background: #0284c7;">Mở App</a>
                                 {% if is_admin %}
                                     <a href="/admin/code/{{ slug }}" class="btn-link" style="background: #eab308;">Xem Code</a>
                                 {% endif %}
@@ -230,9 +231,6 @@ def deploy():
     if not slug:
         return "Tên đường dẫn không được để trống!", 400
         
-    if slug in CLOUD_APPS:
-        return "Tên đường dẫn này đã có người sử dụng! Vui lòng chọn tên khác.", 400
-        
     proj_folder = os.path.join(PROJECTS_DIR, slug)
     os.makedirs(proj_folder, exist_ok=True)
     
@@ -248,7 +246,17 @@ def deploy():
 def site_index_redirect():
     return redirect(url_for('index'))
 
-# Điều hướng app con thông minh: Tự động chuẩn hóa path để không bao giờ bị lỗi 404
+# --- NÂNG CẤP HỆ THỐNG ĐIỀU HƯỚNG & VÁ LỖI ĐƯỜNG DẪN TỰ ĐỘNG ---
+def auto_fix_html_links(html_content, slug):
+    if not isinstance(html_content, str):
+        return html_content
+    prefix = f"/site/{slug}/"
+    # Tự động thay thế các đường dẫn tuyệt đối bắt đầu bằng dấu / thành đường dẫn có chứa /site/<slug>/
+    # Giúp app con dùng href="/login" hay action="/topup" tự động chạy mượt mà không bao giờ 404
+    html_content = re.sub(r'href=["\']/(?!/)', f'href="{prefix}', html_content)
+    html_content = re.sub(r'action=["\']/(?!/)', f'action="{prefix}', html_content)
+    return html_content
+
 @app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def site_handler(slug, subpath):
@@ -264,24 +272,26 @@ def site_handler(slug, subpath):
         if hasattr(mod, 'handle_request'):
             original_path_info = request.environ.get('PATH_INFO', '')
             
-            # Chuyển đổi đường dẫn subpath thành dạng chuẩn cho app con (VD: /login, /topup)
+            # Chuẩn hóa path truyền vào app con
             clean_subpath = '/' + subpath if subpath else '/'
-            if not clean_subpath.startswith('/'):
-                clean_subpath = '/' + clean_subpath
             request.environ['PATH_INFO'] = clean_subpath
             
+            # Gọi hàm xử lý của app con
             response = mod.handle_request(request)
             
+            # Trả lại path gốc cho hệ thống
             request.environ['PATH_INFO'] = original_path_info
+            
+            # Nếu response trả về là chuỗi HTML, tự động fix các đường dẫn liên kết
+            if isinstance(response, str):
+                response = auto_fix_html_links(response, slug)
+            
             return response
-        elif hasattr(mod, 'index'):
-            return mod.index()
-        elif hasattr(mod, 'HTML_CODE'):
-            return render_template_string(mod.HTML_CODE)
         else:
-            return "Lỗi: Code Python phải có hàm handle_request(req), hàm index(), hoặc biến HTML_CODE!", 500
+            return "Lỗi: Code Python của app con phải có hàm handle_request(req)!", 500
     except Exception as e:
-        return f"Lỗi thực thi mã nguồn: {str(e)}", 500
+        import traceback
+        return f"<pre style='color: #f87171; background: #1e293b; padding: 20px; border-radius: 8px;'>Lỗi thực thi mã nguồn ứng dụng:\n{traceback.format_exc()}</pre>", 500
 
 @app.route('/admin/code/<slug>')
 def admin_view_code(slug):
