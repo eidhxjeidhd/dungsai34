@@ -1,28 +1,32 @@
 import os
-import random
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# Kho lưu trữ các trang web được tạo ra (Slug -> Thông tin trang web)
+CREATED_SITES = {}
 USERS = {}
 
-HTML_TEMPLATE = """
+# Giao diện Trang chủ & Quản lý / Tạo web
+HOME_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thật Lòng Hay Giả Dối</title>
+    <title>Hệ Thống Web Tạo Web</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .container { max-width: 600px; width: 100%; }
+        .container { max-width: 650px; width: 100%; }
         .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; box-sizing: border-box; }
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
-        input, button { width: 100%; padding: 12px; margin-top: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        input, textarea, select, button { width: 100%; padding: 12px; margin-top: 8px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
+        textarea { resize: vertical; height: 100px; }
         button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; }
         button:hover { background: #0369a1; }
         .btn-success { background: #16a34a; }
+        .btn-success:hover { background: #15803d; }
         .link-box { background: #090d16; padding: 10px; border-radius: 8px; word-break: break-all; color: #34d399; font-size: 14px; margin-bottom: 15px; border: 1px solid #334155; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
@@ -33,7 +37,7 @@ HTML_TEMPLATE = """
     <div class="container">
         {% if not session.get('user') %}
             <div class="card">
-                <h2>🔐 Đăng Nhập / Đăng Ký</h2>
+                <h2>🔐 Đăng Nhập / Đăng Ký Trình Tạo Web</h2>
                 <form method="POST" action="/auth">
                     <label>Tài khoản Gmail:</label>
                     <input type="email" name="email" placeholder="Nhập Gmail..." required>
@@ -48,90 +52,62 @@ HTML_TEMPLATE = """
                     <p style="color: #f87171; text-align: center;">{{ error }}</p>
                 {% endif %}
             </div>
-        {% elif session.get('user') == 'admin@gmail.com' %}
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #facc15; font-weight: bold;">👑 Khu Vực Admin</span>
-                    <a href="/logout" style="color: #f87171; text-decoration: none;">Đăng xuất</a>
-                </div>
-                <h2>Quản Lý Toàn Bộ Người Dùng</h2>
-                {% if users_list %}
-                    <table>
-                        <tr>
-                            <th>Email</th>
-                            <th>Số câu hỏi</th>
-                            <th>Xem chi tiết</th>
-                        </tr>
-                        {% for u in users_list %}
-                        <tr>
-                            <td>{{ u.email }}</td>
-                            <td>{{ u.questions|length }} câu</td>
-                            <td><a href="/admin/view/{{ u.email }}" style="color: #38bdf8; text-decoration: none;">Xem thói quen</a></td>
-                        </tr>
-                        {% endfor %}
-                    </table>
-                {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có người dùng nào.</p>
-                {% endif %}
-            </div>
         {% else %}
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>👤 Chào, <b>{{ session.get('user') }}</b></span>
+                    <span>👤 Chủ sở hữu: <b>{{ session.get('user') }}</b></span>
                     <a href="/logout" style="color: #f87171; text-decoration: none; font-size: 14px;">Đăng xuất</a>
                 </div>
             </div>
 
             <div class="card">
-                <h2>🔗 Link Thử Thách Của Bạn</h2>
-                <div class="link-box">{{ base_url }}/play/{{ session.get('user') }}</div>
+                <h2>🚀 Trình Tạo Web Tự Động</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Điền thông tin bên dưới để hệ thống tự động xuất bản một trang web công khai mới:</p>
+                
+                <form method="POST" action="/create_site">
+                    <label>Đường dẫn trang web (Slug - Viết liền không dấu):</label>
+                    <input type="text" name="slug" placeholder="Ví dụ: chao-ngay-moi, shop-game..." required>
+                    
+                    <label>Tiêu đề trang (Title):</label>
+                    <input type="text" name="title" placeholder="Ví dụ: Shop Acc Blox Fruit Uy Tín" required>
 
-                <h3>✍️ Thêm Câu Hỏi (Đã tạo: {{ questions|length }}/10 câu)</h3>
-                {% if questions|length < 10 %}
-                <form method="POST" action="/add_question">
-                    <label>Câu hỏi thói quen:</label>
-                    <input type="text" name="question" placeholder="Ví dụ: Tôi hay dùng ốp màu gì?" required>
-                    <label style="color: #34d399;">Đáp án đúng (Thật lòng):</label>
-                    <input type="text" name="correct" placeholder="Ví dụ: Ốp trắng" required>
-                    <label style="color: #f87171;">Đáp án sai 1:</label>
-                    <input type="text" name="wrong1" placeholder="Ví dụ: Ốp đen" required>
-                    <label style="color: #f87171;">Đáp án sai 2:</label>
-                    <input type="text" name="wrong2" placeholder="Ví dụ: Ốp trong suốt" required>
-                    <label style="color: #f87171;">Đáp án sai 3:</label>
-                    <input type="text" name="wrong3" placeholder="Ví dụ: Không dùng ốp" required>
-                    <button type="submit" class="btn-success">Thêm Câu Hỏi</button>
+                    <label>Tiêu đề chính trên web (Heading):</label>
+                    <input type="text" name="heading" placeholder="Ví dụ: Chào mừng bạn đến với cửa hàng!" required>
+
+                    <label>Nội dung hiển thị trên web:</label>
+                    <textarea name="content" placeholder="Nhập nội dung giới thiệu, mô tả hoặc thông điệp của bạn ở đây..." required></textarea>
+
+                    <label>Chọn phong cách màu nền:</label>
+                    <select name="bg_color">
+                        <option value="#0f172a">Tối hiện đại (Dark Slate)</option>
+                        <option value="#18181b">Đen tuyền (Zinc Dark)</option>
+                        <option value="#0f172a">Xanh biển sâu (Deep Ocean)</option>
+                        <option value="#3b0764">Tím huyền bí (Purple Night)</option>
+                    </select>
+
+                    <button type="submit" class="btn-success">✨ Tạo Và Xuất Bản Web Ngay</button>
                 </form>
-                {% else %}
-                <p style="color: #facc15; text-align: center;">Đã đạt giới hạn tối đa 10 câu!</p>
-                {% endif %}
             </div>
 
-            <!-- BẢNG DANH SÁCH NGƯỜI CHƠI ĐÃ THAM GIA -->
             <div class="card">
-                <h3>📊 Nhật Ký Bạn Bè Đã Trả Lời</h3>
-                {% if history %}
+                <h3>📋 Danh Sách Các Web Bạn Đã Tạo</h3>
+                {% if my_sites %}
                     <table>
                         <tr>
-                            <th>Tên / Người chơi</th>
-                            <th>Điểm số</th>
-                            <th>Trạng thái</th>
+                            <th>Tên Web / Tiêu đề</th>
+                            <th>Đường dẫn công khai</th>
+                            <th>Thao tác</th>
                         </tr>
-                        {% for h in history %}
+                        {% for s in my_sites %}
                         <tr>
-                            <td><b>{{ h.name }}</b></td>
-                            <td>{{ h.score }}% ({{ h.correct }}/{{ h.total }})</td>
-                            <td>
-                                {% if h.cheated %}
-                                    <span style="color: #f87171; font-weight: bold;">⚠ Gian lận (Làm lại)</span>
-                                {% else %}
-                                    <span style="color: #34d399;">Hợp lệ</span>
-                                {% endif %}
-                            </td>
+                            <td><b>{{ s.title }}</b></td>
+                            <td><a href="/site/{{ s.slug }}" target="_blank" style="color: #38bdf8;">/site/{{ s.slug }}</a></td>
+                            <td><a href="/delete_site/{{ s.slug }}" style="color: #f87171; text-decoration: none;">Xóa</a></td>
                         </tr>
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có ai chơi thử link của bạn.</p>
+                    <p style="color: #94a3b8; text-align: center;">Bạn chưa tạo trang web nào cả.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -140,142 +116,43 @@ HTML_TEMPLATE = """
 </html>
 """
 
-PLAY_TEMPLATE = """
+# Giao diện mẫu cho các trang web con được tạo ra tự động
+DYNAMIC_SITE_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thử Thách Thật Lòng Hay Giả Dối</title>
+    <title>{{ title }}</title>
     <style>
-        body { background: #0f172a; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .container { max-width: 600px; width: 100%; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; box-sizing: border-box; }
-        h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
-        .radio-label { display: block; background: #0f172a; padding: 10px; margin-top: 8px; border-radius: 6px; border: 1px solid #475569; cursor: pointer; }
-        .radio-label:hover { background: #1e293b; border-color: #38bdf8; }
-        input[type="text"], button { width: 100%; padding: 12px; margin-top: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
-        button { background: #16a34a; font-weight: bold; border: none; cursor: pointer; }
-        button:hover { background: #15803d; }
+        body { background: {{ bg_color }}; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .site-card { background: rgba(30, 41, 59, 0.85); padding: 30px; border-radius: 16px; max-width: 600px; width: 100%; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; }
+        h1 { color: #38bdf8; margin-top: 0; font-size: 28px; }
+        p { color: #cbd5e1; font-size: 18px; line-height: 1.6; white-space: pre-wrap; margin-top: 20px; }
+        .footer { margin-top: 30px; font-size: 12px; color: #64748b; border-top: 1px solid #334155; padding-top: 15px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <h2>🎯 Thử Thách Thói Quen Của: <span style="color: #facc15;">{{ owner }}</span></h2>
-            
-            {% if not result_checked %}
-                <form method="POST" id="quizForm">
-                    <label><b>Nhập tên của bạn để bắt đầu chơi:</b></label>
-                    <input type="text" name="player_name" placeholder="Ví dụ: Văn A..." required>
-                    
-                    {% for item in quiz_data %}
-                        <div style="margin-bottom: 20px; margin-top: 15px;">
-                            <label><b>Câu {{ loop.index }}:</b> {{ item.q }}</label>
-                            {% for opt in item.options %}
-                                <label class="radio-label">
-                                    <input type="radio" name="question_{{ item.index }}" value="{{ opt }}" required> {{ opt }}
-                                </label>
-                            {% endfor %}
-                        </div>
-                    {% endfor %}
-                    <!-- Trường ẩn để ghi nhận gian lận nếu bấm làm lại/quay lại -->
-                    <input type="hidden" name="cheated" id="cheatedInput" value="0">
-                    <button type="submit">Kiểm Tra Độ Thật Lòng</button>
-                </form>
-
-                <script>
-                    // Kiểm tra nếu người chơi đã từng làm trước đó trong trình duyệt này mà bấm quay lại / làm lại
-                    window.addEventListener('pageshow', function(event) {
-                        if (sessionStorage.getItem("played_{{ owner }}")) {
-                            document.getElementById("cheatedInput").value = "1";
-                        }
-                    });
-                    document.getElementById("quizForm").addEventListener("submit", function() {
-                        sessionStorage.setItem("played_{{ owner }}", "true");
-                    });
-                </script>
-            {% else %}
-                <div style="text-align: center;">
-                    <h3>Kết Quả Đánh Giá</h3>
-                    <p style="font-size: 20px; color: {% if score == 100 %}#34d399{% else %}#f87171{% endif %};">
-                        Độ thật lòng: <b>{{ score }}%</b> (Đúng {{ correct_count }}/{{ total_questions }} câu)
-                    </p>
-                    {% if cheated %}
-                        <p style="color: #f87171; font-weight: bold;">⚠ Phát hiện gian lận: Bạn đã bấm quay lại hoặc làm lại bài kiểm tra!</p>
-                    {% else %}
-                        <p style="color: #34d399;">Bài làm hợp lệ, không gian lận!</p>
-                    {% endif %}
-                    <p style="color: #94a3b8;">{{ message }}</p>
-                    <a href="/play/{{ owner }}"><button style="background: #0284c7; margin-top: 15px;">Chơi Lại (Sẽ bị tính là gian lận)</button></a>
-                </div>
-            {% endif %}
+    <div class="site-card">
+        <h1>{{ heading }}</h1>
+        <p>{{ content }}</p>
+        <div class="footer">
+            Trang web này được tạo tự động bởi hệ thống Python Flask Web Builder.
         </div>
     </div>
 </body>
 </html>
 """
 
-ADMIN_VIEW_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Xem Thói Quen</title>
-    <style>
-        body { background: #0f172a; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .container { max-width: 600px; width: 100%; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; box-sizing: border-box; }
-        h2 { color: #38bdf8; text-align: center; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
-        th, td { padding: 10px; border-bottom: 1px solid #334155; text-align: left; }
-        th { color: #94a3b8; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="card">
-            <h2>Thói Quen Của: {{ target_email }}</h2>
-            <table>
-                <tr>
-                    <th>STT</th>
-                    <th>Câu hỏi</th>
-                    <th>Đáp án đúng & Các đáp án nhiễu</th>
-                </tr>
-                {% for q in questions %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td><b>{{ q.q }}</b></td>
-                    <td>
-                        <span style="color: #34d399;">✔ Đúng: {{ q.correct }}</span><br>
-                        <span style="color: #f87171;">❌ Sai: {{ q.wrongs|join(', ') }}</span>
-                    </td>
-                </tr>
-                {% endfor %}
-            </table>
-            <br>
-            <a href="/" style="color: #38bdf8; text-decoration: none;">< Quay lại trang Admin</a>
-        </div>
-    </div>
-</body>
-</html>
-"""
-
-USERS["admin@gmail.com"] = {"password": "adminpassword123", "questions": [], "history": []}
+USERS["admin@gmail.com"] = {"password": "adminpassword123"}
 
 @app.route('/')
 def index():
     user = session.get('user')
-    if user == 'admin@gmail.com':
-        users_list = [{"email": email, "questions": data["questions"]} for email, data in USERS.items() if email != 'admin@gmail.com']
-        return render_template_string(HTML_TEMPLATE, users_list=users_list)
-    elif user:
-        questions = USERS[user]["questions"]
-        history = USERS[user].get("history", [])
-        base_url = request.host_url.rstrip('/')
-        return render_template_string(HTML_TEMPLATE, questions=questions, history=history, base_url=base_url)
-    return render_template_string(HTML_TEMPLATE)
+    if user:
+        my_sites = [s for s in CREATED_SITES.values() if s['owner'] == user]
+        return render_template_string(HOME_TEMPLATE, my_sites=my_sites)
+    return render_template_string(HOME_TEMPLATE)
 
 @app.route('/auth', methods=['POST'])
 def auth():
@@ -285,14 +162,14 @@ def auth():
     
     if action == 'register':
         if email in USERS:
-            return render_template_string(HTML_TEMPLATE, error="Email này đã tồn tại!")
-        USERS[email] = {"password": password, "questions": [], "history": []}
+            return render_template_string(HOME_TEMPLATE, error="Email này đã tồn tại!")
+        USERS[email] = {"password": password}
         session['user'] = email
     elif action == 'login':
         if email in USERS and USERS[email]["password"] == password:
             session['user'] = email
         else:
-            return render_template_string(HTML_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!")
+            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!")
     return redirect(url_for('index'))
 
 @app.route('/logout')
@@ -300,85 +177,44 @@ def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
 
-@app.route('/add_question', methods=['POST'])
-def add_question():
+@app.route('/create_site', methods=['POST'])
+def create_site():
     user = session.get('user')
-    if user and user in USERS:
-        if len(USERS[user]["questions"]) < 10:
-            q = request.form.get('question')
-            correct = request.form.get('correct').strip()
-            wrongs = [
-                request.form.get('wrong1').strip(),
-                request.form.get('wrong2').strip(),
-                request.form.get('wrong3').strip()
-            ]
-            USERS[user]["questions"].append({"q": q, "correct": correct, "wrongs": wrongs})
-    return redirect(url_for('index'))
-
-@app.route('/delete_q/<int:index>')
-def delete_q(index):
-    user = session.get('user')
-    if user and user in USERS:
-        if 0 <= index < len(USERS[user]["questions"]):
-            USERS[user]["questions"].pop(index)
-    return redirect(url_for('index'))
-
-@app.route('/play/<email>', methods=['GET', 'POST'])
-def play(email):
-    if email not in USERS:
-        return "Không tìm thấy người chơi này!", 404
-    
-    questions = USERS[email]["questions"]
-    if not questions:
-        return "Người dùng này chưa thiết lập câu hỏi thói quen nào cả!", 400
-        
-    quiz_data = []
-    for i, q in enumerate(questions):
-        options = q["wrongs"] + [q["correct"]]
-        random.shuffle(options)
-        quiz_data.append({"index": i, "q": q["q"], "options": options, "correct": q["correct"]})
-        
-    if request.method == 'POST':
-        player_name = request.form.get('player_name', 'Ẩn danh').strip()
-        cheated = request.form.get('cheated') == '1'
-        
-        correct_count = 0
-        total = len(questions)
-        for item in quiz_data:
-            user_ans = request.form.get(f"question_{item['index']}")
-            if user_ans == item["correct"]:
-                correct_count += 1
-                
-        score = int((correct_count / total) * 100)
-        if score == 100:
-            message = "Quá đỉnh! 100% không giả dối, hiểu nhau cực kỳ sâu sắc!"
-        elif score >= 50:
-            message = "Cũng tạm ổn, nhưng vẫn có điểm gian dối lấp ló đâu đây!"
-        else:
-            message = "Giả dối quá! Đoán sai bét nhè các câu trả lời mẹo rồi!"
-            
-        # Lưu kết quả vào lịch sử của chủ link
-        if "history" not in USERS[email]:
-            USERS[email]["history"] = []
-        USERS[email]["history"].insert(0, {
-            "name": player_name,
-            "score": score,
-            "correct": correct_count,
-            "total": total,
-            "cheated": cheated
-        })
-            
-        return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=True, score=score, correct_count=correct_count, total_questions=total, cheated=cheated, message=message)
-        
-    return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=False)
-
-@app.route('/admin/view/<email>')
-def admin_view(email):
-    if session.get('user') != 'admin@gmail.com':
+    if not user:
         return redirect(url_for('index'))
-    if email not in USERS:
-        return "Không tìm thấy!", 404
-    return render_template_string(ADMIN_VIEW_TEMPLATE, target_email=email, questions=USERS[email]["questions"])
+    
+    slug = request.form.get('slug').strip().lower()
+    title = request.form.get('title')
+    heading = request.form.get('heading')
+    content = request.form.get('content')
+    bg_color = request.form.get('bg_color')
+    
+    if slug in CREATED_SITES:
+        return "Đường dẫn (Slug) này đã tồn tại! Vui lòng chọn tên khác.", 400
+        
+    CREATED_SITES[slug] = {
+        "owner": user,
+        "title": title,
+        "heading": heading,
+        "content": content,
+        "bg_color": bg_color
+    }
+    
+    return redirect(url_for('index'))
+
+@app.route('/site/<slug>')
+def view_site(slug):
+    if slug not in CREATED_SITES:
+        return "Trang web này không tồn tại hoặc đã bị xóa!", 404
+    site_data = CREATED_SITES[slug]
+    return render_template_string(DYNAMIC_SITE_TEMPLATE, **site_data)
+
+@app.route('/delete_site/<slug>')
+def delete_site(slug):
+    user = session.get('user')
+    if slug in CREATED_SITES and CREATED_SITES[slug]['owner'] == user:
+        del CREATED_SITES[slug]
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
