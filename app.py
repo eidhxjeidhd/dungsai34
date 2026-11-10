@@ -1,28 +1,33 @@
 import os
+import subprocess
+import sys
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Kho lưu trữ các trang web do bác tự code (lưu theo slug)
-CUSTOM_SITES = {}
+# Thư mục chứa các project Python do người dùng tự tạo
+PROJECTS_DIR = "user_projects"
+os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+# Quản lý danh sách các app đang chạy ngầm
+RUNNING_APPS = {}
 USERS = {}
 
-# Giao diện Trang chủ & Trình quản lý code
 HOME_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trình Quản Lý & Xuất Bản Code Tự Viết</title>
+    <title>Xưởng Sản Xuất Web Python Tự Động</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .container { max-width: 750px; width: 100%; }
+        .container { max-width: 800px; width: 100%; }
         .card { background: #1e293b; padding: 25px; border-radius: 16px; margin-bottom: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); box-sizing: border-box; }
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
         input, textarea, button { width: 100%; padding: 14px; margin-top: 8px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 15px; }
-        textarea { resize: vertical; height: 250px; font-family: monospace; font-size: 14px; color: #38bdf8; }
+        textarea { resize: vertical; height: 300px; font-family: monospace; font-size: 13px; color: #38bdf8; }
         button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
         button:hover { background: #0369a1; }
         .btn-success { background: #16a34a; }
@@ -60,39 +65,44 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h2>💻 Đăng Tải Mã Nguồn Của Bạn</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Dán trọn bộ code HTML/CSS/JS tự viết của bạn vào đây, hệ thống sẽ phát hành nguyên bản thành một trang web công khai!</p>
+                <h2>⚡ Dán Mã Nguồn Python (Backend App)</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Dán code Flask/Python tự viết của bạn vào đây. Hệ thống sẽ tự tạo file, cấp cổng chạy độc lập để làm shop hoặc tool động!</p>
                 
-                <form method="POST" action="/publish_code">
-                    <label>Tên đường dẫn (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="slug" placeholder="Ví dụ: shop-robux, game-tool..." required>
+                <form method="POST" action="/deploy_py">
+                    <label>Tên Project (Slug - Viết liền không dấu):</label>
+                    <input type="text" name="project_name" placeholder="Ví dụ: myshop, toolkiemhieu..." required>
                     
-                    <label>Dán mã nguồn HTML (Raw Code):</label>
-                    <textarea name="raw_code" placeholder="&lt;!DOCTYPE html&gt;&#10;&lt;html&gt;&#10;&lt;head&gt;...&lt;/head&gt;&#10;&lt;body&gt;&#10;  Code của bạn ở đây...&#10;&lt;/body&gt;&#10;&lt;/html&gt;" required></textarea>
+                    <label>Mã nguồn Python (.py):</label>
+                    <textarea name="py_code" placeholder="from flask import Flask&#10;app = Flask(__name__)&#10;&#10;@app.route('/')&#10;def home():&#10;    return 'Shop của tôi đang chạy!'&#10;&#10;if __name__ == '__main__':&#10;    app.run(host='0.0.0.0', port=5001)" required></textarea>
 
-                    <button type="submit" class="btn-success">🚀 Phát Hành Code Lên Web Ngay</button>
+                    <button type="submit" class="btn-success">🚀 Khởi Chạy App Python Ngay</button>
                 </form>
             </div>
 
             <div class="card">
-                <h3>📋 Danh Sách Các Web Đã Xuất Bản</h3>
-                {% if my_sites %}
+                <h3>📋 Danh Sách Các App Đang Hoạt Động</h3>
+                {% if my_projects %}
                     <table>
                         <tr>
-                            <th>Đường dẫn (Slug)</th>
+                            <th>Tên Project</th>
+                            <th>Cổng (Port)</th>
+                            <th>Trạng thái</th>
                             <th>Hành động</th>
-                            <th>Xóa</th>
                         </tr>
-                        {% for slug, data in my_sites.items() %}
+                        {% for name, info in my_projects.items() %}
                         <tr>
-                            <td><b>{{ slug }}</b></td>
-                            <td><a href="/p/{{ slug }}" target="_blank" style="color: #38bdf8;">Truy cập link web</a></td>
-                            <td><a href="/delete/{{ slug }}" style="color: #f87171; text-decoration: none;">Xóa</a></td>
+                            <td><b>{{ name }}</b></td>
+                            <td>{{ info.port }}</td>
+                            <td><span style="color: #4ade80;">● Đang chạy</span></td>
+                            <td>
+                                <a href="http://localhost:{{ info.port }}" target="_blank" style="color: #38bdf8; margin-right: 10px;">Mở Web</a>
+                                <a href="/stop/{{ name }}" style="color: #f87171; text-decoration: none;">Tắt</a>
+                            </td>
                         </tr>
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có trang web nào được xuất bản.</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có ứng dụng Python nào được triển khai.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -101,15 +111,15 @@ HOME_TEMPLATE = """
 </html>
 """
 
-# Tài khoản mặc định để test nhanh
 USERS["admin@gmail.com"] = {"password": "adminpassword123"}
+NEXT_PORT = 6000 # Cổng khởi điểm cho các app con do người dùng tạo
 
 @app.route('/')
 def index():
     user = session.get('user')
     if user:
-        my_sites = {slug: data for slug, data in CUSTOM_SITES.items() if data['owner'] == user}
-        return render_template_string(HOME_TEMPLATE, my_sites=my_sites)
+        my_projects = {name: data for name, data in RUNNING_APPS.items() if data['owner'] == user}
+        return render_template_string(HOME_TEMPLATE, my_projects=my_projects)
     return render_template_string(HOME_TEMPLATE)
 
 @app.route('/auth', methods=['POST'])
@@ -135,40 +145,55 @@ def logout():
     session.pop('user', None)
     return redirect(url_for('index'))
 
-@app.route('/publish_code', methods=['POST'])
-def publish_code():
+@app.route('/deploy_py', methods=['POST'])
+def deploy_py():
+    global NEXT_PORT
     user = session.get('user')
     if not user:
         return redirect(url_for('index'))
     
-    slug = request.form.get('slug').strip().lower()
-    raw_code = request.form.get('raw_code')
+    project_name = request.form.get('project_name').strip().lower()
+    py_code = request.form.get('py_code')
     
-    if slug in CUSTOM_SITES:
-        return "Đường dẫn (Slug) này đã bị trùng! Vui lòng chọn tên khác.", 400
+    if project_name in RUNNING_APPS:
+        return "Tên project này đã tồn tại! Vui lòng chọn tên khác.", 400
         
-    # Lưu lại chính xác nguyên bản đoạn code mà bác tự viết
-    CUSTOM_SITES[slug] = {
-        "owner": user,
-        "code": raw_code
-    }
+    # Tạo thư mục riêng cho project
+    proj_folder = os.path.join(PROJECTS_DIR, project_name)
+    os.makedirs(proj_folder, exist_ok=True)
     
-    return redirect(url_for('view_custom_site', slug=slug))
+    file_path = os.path.join(proj_folder, "main.py")
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(py_code)
+        
+    # Cấp một port độc lập và chạy tiến trình Python ngầm
+    port = NEXT_PORT
+    NEXT_PORT += 1
+    
+    try:
+        # Chạy file python độc lập dưới background
+        process = subprocess.Popen([sys.executable, file_path], cwd=proj_folder)
+        RUNNING_APPS[project_name] = {
+            "owner": user,
+            "port": port,
+            "process": process
+        }
+    except Exception as e:
+        return f"Lỗi khi khởi chạy ứng dụng: {str(e)}", 500
+        
+    return redirect(url_for('index'))
 
-@app.route('/p/<slug>')
-def view_custom_site(slug):
-    if slug not in CUSTOM_SITES:
-        return "Trang web không tồn tại hoặc đã bị xóa!", 404
-    # Trả về thẳng nguyên văn mã nguồn HTML do bác tự code mà không qua bộ lọc nào cả
-    return render_template_string(CUSTOM_SITES[slug]['code'])
-
-@app.route('/delete/<slug>')
-def delete_site(slug):
+@app.route('/stop/<project_name>')
+def stop_project(project_name):
     user = session.get('user')
-    if slug in CUSTOM_SITES and CUSTOM_SITES[slug]['owner'] == user:
-        del CUSTOM_SITES[slug]
+    if project_name in RUNNING_APPS and RUNNING_APPS[project_name]['owner'] == user:
+        # Tắt tiến trình đang chạy ngầm
+        try:
+            RUNNING_APPS[project_name]['process'].terminate()
+        except:
+            pass
+        del RUNNING_APPS[project_name]
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
