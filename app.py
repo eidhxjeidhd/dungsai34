@@ -88,7 +88,7 @@ HTML_TEMPLATE = """
                 <div class="link-box">{{ base_url }}/play/{{ session.get('user') }}</div>
 
                 <h3>✍️ Thêm Câu Hỏi Tùy Chỉnh (Đã tạo: {{ questions|length }}/10 câu)</h3>
-                <p style="color: #94a3b8; font-size: 13px;">Bạn có thể tạo bao nhiêu câu tùy ý (tối đa 10 câu). Thêm xong gửi link cho bạn bè làm đúng bấy nhiêu câu.</p>
+                <p style="color: #94a3b8; font-size: 13px;">Bạn có thể tạo tối đa 10 câu.</p>
                 
                 {% if questions|length < 10 %}
                 <form method="POST" action="/add_question">
@@ -130,7 +130,7 @@ HTML_TEMPLATE = """
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có câu hỏi nào. Hãy thêm ít nhất 1 câu!</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có câu hỏi nào.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -170,7 +170,7 @@ PLAY_TEMPLATE = """
                             <label><b>Câu {{ loop.index }}:</b> {{ item.q }}</label>
                             {% for opt in item.options %}
                                 <label class="radio-label">
-                                    <input type="radio" name="question_{{ loop.index0 }}" value="{{ opt }}" required> {{ opt }}
+                                    <input type="radio" name="question_{{ item.index }}" value="{{ opt }}" required> {{ opt }}
                                 </label>
                             {% endfor %}
                         </div>
@@ -309,16 +309,16 @@ def play(email):
         return "Người dùng này chưa thiết lập câu hỏi thói quen nào cả!", 400
         
     quiz_data = []
-    for q in questions:
+    for i, q in enumerate(questions):
         options = q["wrongs"] + [q["correct"]]
         random.shuffle(options)
-        quiz_data.append({"q": q["q"], "options": options, "correct": q["correct"]})
+        quiz_data.append({"index": i, "q": q["q"], "options": options, "correct": q["correct"]})
         
     if request.method == 'POST':
         correct_count = 0
         total = len(questions)
-        for i, item in enumerate(quiz_data):
-            user_ans = request.form.get(f"question_{i}")
+        for item in quiz_data:
+            user_ans = request.form.get(f"question_{item['index']}")
             if user_ans == item["correct"]:
                 correct_count += 1
                 
