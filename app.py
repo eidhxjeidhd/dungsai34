@@ -6,13 +6,47 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Thư mục chứa các project Python do người dùng tự tạo
 PROJECTS_DIR = "user_projects"
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
-# Quản lý danh sách các app đang chạy ngầm
 RUNNING_APPS = {}
 USERS = {}
+
+# Đoạn code mẫu mặc định để sẵn trong ô cho người dùng copy hoặc sửa
+DEFAULT_TEMPLATE_CODE = """from flask import Flask, render_template_string
+
+app = Flask(__name__)
+
+# Giao diện mẫu của shop / trang web
+HTML_LAYOUT = '''
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Shop Của Tôi</title>
+    <style>
+        body { background: #0f172a; color: #fff; font-family: sans-serif; text-align: center; padding: 50px; }
+        .box { background: #1e293b; padding: 30px; border-radius: 12px; display: inline-block; border: 1px solid #334155; }
+        h1 { color: #38bdf8; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>🚀 Chào mừng đến với Shop của tôi!</h1>
+        <p>Đây là trang web chạy bằng code Python tự chỉnh sửa.</p>
+    </div>
+</body>
+</html>
+'''
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_LAYOUT)
+
+if __name__ == '__main__':
+    # Chạy ở port bất kỳ do hệ thống chỉ định
+    app.run(host='0.0.0.0', port=5000)
+"""
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -27,7 +61,7 @@ HOME_TEMPLATE = """
         .card { background: #1e293b; padding: 25px; border-radius: 16px; margin-bottom: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); box-sizing: border-box; }
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
         input, textarea, button { width: 100%; padding: 14px; margin-top: 8px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 15px; }
-        textarea { resize: vertical; height: 300px; font-family: monospace; font-size: 13px; color: #38bdf8; }
+        textarea { resize: vertical; height: 320px; font-family: monospace; font-size: 13px; color: #38bdf8; }
         button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
         button:hover { background: #0369a1; }
         .btn-success { background: #16a34a; }
@@ -65,15 +99,16 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h2>⚡ Dán Mã Nguồn Python (Backend App)</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Dán code Flask/Python tự viết của bạn vào đây. Hệ thống sẽ tự tạo file, cấp cổng chạy độc lập để làm shop hoặc tool động!</p>
+                <h2>⚡ Kho Code Mẫu & Triển Khai Python</h2>
+                <p style="color: #94a3b8; font-size: 14px;">Dưới đây là đoạn code Python mẫu có sẵn. Bạn có thể sao chép ra ngoài, hoặc chỉnh sửa trực tiếp trong ô bên dưới rồi bấm khởi chạy!</p>
                 
                 <form method="POST" action="/deploy_py">
                     <label>Tên Project (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="project_name" placeholder="Ví dụ: myshop, toolkiemhieu..." required>
+                    <input type="text" name="project_name" placeholder="Ví dụ: shopcua-toi..." required>
                     
-                    <label>Mã nguồn Python (.py):</label>
-                    <textarea name="py_code" placeholder="from flask import Flask&#10;app = Flask(__name__)&#10;&#10;@app.route('/')&#10;def home():&#10;    return 'Shop của tôi đang chạy!'&#10;&#10;if __name__ == '__main__':&#10;    app.run(host='0.0.0.0', port=5001)" required></textarea>
+                    <label>Mã nguồn Python (.py) - Có sẵn mẫu để sửa:</label>
+                    <!-- Đưa thẳng code mẫu vào bên trong thẻ textarea để hiện sẵn cho người dùng -->
+                    <textarea name="py_code" required>{{ default_code }}</textarea>
 
                     <button type="submit" class="btn-success">🚀 Khởi Chạy App Python Ngay</button>
                 </form>
@@ -112,15 +147,15 @@ HOME_TEMPLATE = """
 """
 
 USERS["admin@gmail.com"] = {"password": "adminpassword123"}
-NEXT_PORT = 6000 # Cổng khởi điểm cho các app con do người dùng tạo
+NEXT_PORT = 6000
 
 @app.route('/')
 def index():
     user = session.get('user')
     if user:
         my_projects = {name: data for name, data in RUNNING_APPS.items() if data['owner'] == user}
-        return render_template_string(HOME_TEMPLATE, my_projects=my_projects)
-    return render_template_string(HOME_TEMPLATE)
+        return render_template_string(HOME_TEMPLATE, my_projects=my_projects, default_code=DEFAULT_TEMPLATE_CODE)
+    return render_template_string(HOME_TEMPLATE, default_code=DEFAULT_TEMPLATE_CODE)
 
 @app.route('/auth', methods=['POST'])
 def auth():
@@ -130,14 +165,14 @@ def auth():
     
     if action == 'register':
         if email in USERS:
-            return render_template_string(HOME_TEMPLATE, error="Email đã tồn tại!")
+            return render_template_string(HOME_TEMPLATE, error="Email đã tồn tại!", default_code=DEFAULT_TEMPLATE_CODE)
         USERS[email] = {"password": password}
         session['user'] = email
     elif action == 'login':
         if email in USERS and USERS[email]["password"] == password:
             session['user'] = email
         else:
-            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!")
+            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!", default_code=DEFAULT_TEMPLATE_CODE)
     return redirect(url_for('index'))
 
 @app.route('/logout')
@@ -158,7 +193,6 @@ def deploy_py():
     if project_name in RUNNING_APPS:
         return "Tên project này đã tồn tại! Vui lòng chọn tên khác.", 400
         
-    # Tạo thư mục riêng cho project
     proj_folder = os.path.join(PROJECTS_DIR, project_name)
     os.makedirs(proj_folder, exist_ok=True)
     
@@ -166,12 +200,10 @@ def deploy_py():
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(py_code)
         
-    # Cấp một port độc lập và chạy tiến trình Python ngầm
     port = NEXT_PORT
     NEXT_PORT += 1
     
     try:
-        # Chạy file python độc lập dưới background
         process = subprocess.Popen([sys.executable, file_path], cwd=proj_folder)
         RUNNING_APPS[project_name] = {
             "owner": user,
@@ -187,7 +219,6 @@ def deploy_py():
 def stop_project(project_name):
     user = session.get('user')
     if project_name in RUNNING_APPS and RUNNING_APPS[project_name]['owner'] == user:
-        # Tắt tiến trình đang chạy ngầm
         try:
             RUNNING_APPS[project_name]['process'].terminate()
         except:
