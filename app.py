@@ -5,8 +5,6 @@ from flask import Flask, render_template_string, request, redirect, url_for, ses
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Cơ sở dữ liệu giả lập trong bộ nhớ
-# USERS = { "email@gmail.com": {"password": "...", "questions": [{"q": "...", "correct": "...", "wrongs": ["...", "...", "..."]}, ...]} }
 USERS = {}
 
 HTML_TEMPLATE = """
@@ -15,7 +13,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thử Thách Thật Lòng Hay Giả Dối</title>
+    <title>Thật Lòng Hay Giả Dối</title>
     <style>
         body { background: #0f172a; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { max-width: 600px; width: 100%; }
@@ -24,7 +22,6 @@ HTML_TEMPLATE = """
         input, button { width: 100%; padding: 12px; margin-top: 10px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 16px; }
         button { background: #0284c7; font-weight: bold; border: none; cursor: pointer; }
         button:hover { background: #0369a1; }
-        .btn-danger { background: #dc2626; }
         .btn-success { background: #16a34a; }
         .link-box { background: #090d16; padding: 10px; border-radius: 8px; word-break: break-all; color: #34d399; font-size: 14px; margin-bottom: 15px; border: 1px solid #334155; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -34,18 +31,14 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        
-        <!-- TRANG CHỦ / ĐĂNG NHẬP / ĐĂNG KÝ -->
         {% if not session.get('user') %}
             <div class="card">
                 <h2>🔐 Đăng Nhập / Đăng Ký</h2>
                 <form method="POST" action="/auth">
                     <label>Tài khoản Gmail:</label>
                     <input type="email" name="email" placeholder="Nhập Gmail..." required>
-                    
                     <label>Mật khẩu:</label>
                     <input type="password" name="password" placeholder="Nhập mật khẩu..." required>
-                    
                     <div style="display: flex; gap: 10px;">
                         <button type="submit" name="action" value="login" class="btn-success" style="flex: 1;">Đăng Nhập</button>
                         <button type="submit" name="action" value="register" style="flex: 1;">Đăng Ký</button>
@@ -55,8 +48,6 @@ HTML_TEMPLATE = """
                     <p style="color: #f87171; text-align: center;">{{ error }}</p>
                 {% endif %}
             </div>
-
-        <!-- TRANG ADMIN -->
         {% elif session.get('user') == 'admin@gmail.com' %}
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -83,8 +74,6 @@ HTML_TEMPLATE = """
                     <p style="color: #94a3b8; text-align: center;">Chưa có người dùng nào.</p>
                 {% endif %}
             </div>
-
-        <!-- TRANG QUẢN LÝ THÓI quen CỦA USER -->
         {% else %}
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -98,25 +87,22 @@ HTML_TEMPLATE = """
                 <p style="color: #94a3b8; font-size: 14px;">Sao chép link này gửi cho bạn bè:</p>
                 <div class="link-box">{{ base_url }}/play/{{ session.get('user') }}</div>
 
-                <h3>✍️ Thêm Câu Hỏi Mới (Tối đa 10 câu)</h3>
+                <h3>✍️ Thêm Câu Hỏi Tùy Chỉnh (Đã tạo: {{ questions|length }}/10 câu)</h3>
+                <p style="color: #94a3b8; font-size: 13px;">Bạn có thể tạo bao nhiêu câu tùy ý (tối đa 10 câu). Thêm xong gửi link cho bạn bè làm đúng bấy nhiêu câu.</p>
+                
                 {% if questions|length < 10 %}
                 <form method="POST" action="/add_question">
                     <label>Câu hỏi thói quen:</label>
                     <input type="text" name="question" placeholder="Ví dụ: Tôi hay dùng ốp điện thoại màu gì?" required>
-                    
                     <label style="color: #34d399;">Đáp án đúng (Thật lòng):</label>
                     <input type="text" name="correct" placeholder="Ví dụ: Ốp màu trắng" required>
-                    
                     <label style="color: #f87171;">Đáp án sai 1 (Na ná):</label>
                     <input type="text" name="wrong1" placeholder="Ví dụ: Ốp màu đen" required>
-                    
                     <label style="color: #f87171;">Đáp án sai 2 (Na ná):</label>
                     <input type="text" name="wrong2" placeholder="Ví dụ: Ốp màu trong suốt" required>
-                    
                     <label style="color: #f87171;">Đáp án sai 3 (Na ná):</label>
                     <input type="text" name="wrong3" placeholder="Ví dụ: Không dùng ốp" required>
-                    
-                    <button type="submit" class="btn-success">Thêm Câu Hỏi</button>
+                    <button type="submit" class="btn-success">Thêm Câu Này Vào Link</button>
                 </form>
                 {% else %}
                 <p style="color: #facc15; text-align: center;">Bạn đã đạt giới hạn tối đa 10 câu hỏi!</p>
@@ -124,7 +110,7 @@ HTML_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h3>📋 Danh Sách Câu Hỏi ({{ questions|length }}/10)</h3>
+                <h3>📋 Danh Sách Câu Hỏi Đã Tạo ({{ questions|length }})</h3>
                 {% if questions %}
                     <table>
                         <tr>
@@ -144,11 +130,10 @@ HTML_TEMPLATE = """
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có câu hỏi nào được thêm.</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có câu hỏi nào. Hãy thêm ít nhất 1 câu!</p>
                 {% endif %}
             </div>
         {% endif %}
-
     </div>
 </body>
 </html>
@@ -176,6 +161,8 @@ PLAY_TEMPLATE = """
     <div class="container">
         <div class="card">
             <h2>🎯 Thử Thách Thói Quen Của: <span style="color: #facc15;">{{ owner }}</span></h2>
+            <p style="text-align: center; color: #94a3b8; font-size: 14px;">Bài kiểm tra gồm có <b>{{ quiz_data|length }} câu hỏi</b>.</p>
+            
             {% if not result_checked %}
                 <form method="POST">
                     {% for item in quiz_data %}
@@ -183,7 +170,7 @@ PLAY_TEMPLATE = """
                             <label><b>Câu {{ loop.index }}:</b> {{ item.q }}</label>
                             {% for opt in item.options %}
                                 <label class="radio-label">
-                                    <input type="radio" name="ans_{{ loop.index0 }}" value="{{ opt }}" required> {{ opt }}
+                                    <input type="radio" name="question_{{ loop.index0 }}" value="{{ opt }}" required> {{ opt }}
                                 </label>
                             {% endfor %}
                         </div>
@@ -194,7 +181,7 @@ PLAY_TEMPLATE = """
                 <div style="text-align: center;">
                     <h3>Kết Quả Đánh Giá</h3>
                     <p style="font-size: 20px; color: {% if score == 100 %}#34d399{% else %}#f87171{% endif %};">
-                        Độ thật lòng / Hiểu nhau: <b>{{ score }}%</b>
+                        Độ thật lòng / Hiểu nhau: <b>{{ score }}%</b> (Đúng {{ correct_count }}/{{ total_questions }} câu)
                     </p>
                     <p style="color: #94a3b8;">{{ message }}</p>
                     <a href="/play/{{ owner }}"><button style="background: #0284c7; margin-top: 15px;">Làm Lại Thử Thách</button></a>
@@ -252,7 +239,6 @@ ADMIN_VIEW_TEMPLATE = """
 </html>
 """
 
-# Tài khoản admin mặc định
 USERS["admin@gmail.com"] = {"password": "adminpassword123", "questions": []}
 
 @app.route('/')
@@ -322,18 +308,17 @@ def play(email):
     if not questions:
         return "Người dùng này chưa thiết lập câu hỏi thói quen nào cả!", 400
         
-    # Tạo danh sách trộn đáp án cho mỗi phiên chơi
     quiz_data = []
     for q in questions:
         options = q["wrongs"] + [q["correct"]]
-        random.shuffle(options) # Trộn đảo vị trí các đáp án na ná nhau
+        random.shuffle(options)
         quiz_data.append({"q": q["q"], "options": options, "correct": q["correct"]})
         
     if request.method == 'POST':
         correct_count = 0
         total = len(questions)
         for i, item in enumerate(quiz_data):
-            user_ans = request.form.get(f"ans_{i}")
+            user_ans = request.form.get(f"question_{i}")
             if user_ans == item["correct"]:
                 correct_count += 1
                 
@@ -345,7 +330,7 @@ def play(email):
         else:
             message = "Giả dối quá! Đoán sai bét nhè các câu trả lời mẹo rồi, bấm làm lại ngay đi!"
             
-        return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=True, score=score, message=message)
+        return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=True, score=score, correct_count=correct_count, total_questions=total, message=message)
         
     return render_template_string(PLAY_TEMPLATE, owner=email, quiz_data=quiz_data, result_checked=False)
 
