@@ -10,14 +10,16 @@ PROJECTS_DIR = "cloud_projects_isolated"
 os.makedirs(PROJECTS_DIR, exist_ok=True)
 
 CLOUD_APPS = {}
-USERS = {}
 
-# Đoạn code mẫu chuẩn chỉnh, sạch sẽ và có sẵn SQLite độc lập
+# Khởi tạo tài khoản hệ thống, có sẵn tài khoản admin quyền lực
+USERS = {
+    "admin": {"password": "123", "is_admin": True}
+}
+
 DEFAULT_ISOLATED_CODE = """import os
 import sqlite3
 from flask import render_template_string
 
-# File database SQLite riêng biệt cho shop này
 DB_FILE = os.path.join(os.path.dirname(__file__), 'shop_database.db')
 
 def init_db():
@@ -29,7 +31,6 @@ def init_db():
 
 init_db()
 
-# Hàm xử lý chính nhận request từ hệ thống cloud
 def handle_request(req):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -91,18 +92,19 @@ HOME_TEMPLATE = """
     <title>Hệ Thống Cloud Python Độc Lập</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
-        .container { max-width: 800px; width: 100%; }
+        .container { max-width: 850px; width: 100%; }
         .card { background: #1e293b; padding: 25px; border-radius: 16px; margin-bottom: 20px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); box-sizing: border-box; }
         h2, h3 { margin-top: 0; color: #38bdf8; text-align: center; }
         input, textarea, button { width: 100%; padding: 14px; margin-top: 8px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; font-size: 15px; }
         textarea { resize: vertical; height: 320px; font-family: monospace; font-size: 13px; color: #38bdf8; }
-        button, .btn-link { display: inline-block; text-align: center; background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; text-decoration: none; color: #fff; padding: 10px 15px; border-radius: 8px; }
-        button:hover, .btn-link:hover { background: #0369a1; }
-        .btn-success { background: #16a34a; width: 100%; padding: 14px; border-radius: 10px; }
+        button, .btn-link { display: inline-block; text-align: center; background: #0284c7; font-weight: bold; border: none; cursor: pointer; transition: 0.2s; text-decoration: none; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-right: 4px; }
+        button:hover, .btn-link:hover { opacity: 0.8; }
+        .btn-success { background: #16a34a; width: 100%; padding: 14px; border-radius: 10px; font-size: 15px; }
         .btn-success:hover { background: #15803d; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
         th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
         th { color: #94a3b8; }
+        .badge-admin { background: #ef4444; color: white; padding: 3px 8px; border-radius: 6px; font-size: 11px; margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -111,8 +113,8 @@ HOME_TEMPLATE = """
             <div class="card">
                 <h2>🔐 Đăng Nhập Hệ Thống Cloud</h2>
                 <form method="POST" action="/auth">
-                    <label>Tài khoản:</label>
-                    <input type="email" name="email" placeholder="Nhập email..." required>
+                    <label>Tài khoản (Admin gõ: admin / 123):</label>
+                    <input type="text" name="email" placeholder="Nhập tài khoản..." required>
                     <label>Mật khẩu:</label>
                     <input type="password" name="password" placeholder="Nhập mật khẩu..." required>
                     <div style="display: flex; gap: 10px;">
@@ -127,7 +129,7 @@ HOME_TEMPLATE = """
         {% else %}
             <div class="card">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>👤 Tài khoản: <b>{{ session.get('user') }}</b></span>
+                    <span>👤 Tài khoản: <b>{{ session.get('user') }}</b> {% if is_admin %}<span class="badge-admin">SUPER ADMIN</span>{% endif %}</span>
                     <a href="/logout" style="color: #f87171; text-decoration: none; font-size: 14px;">Đăng xuất</a>
                 </div>
             </div>
@@ -148,27 +150,30 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h3>📋 Danh Sách Các App Đã Lên Cloud</h3>
+                <h3>📋 {% if is_admin %}👑 Quản Trị Viên Toàn Bộ Hệ Thống{% else %}📋 Danh Sách App Của Bạn{% endif %}</h3>
                 {% if my_apps %}
                     <table>
                         <tr>
                             <th>Đường dẫn (Slug)</th>
-                            <th>Trạng thái</th>
-                            <th>Hành động</th>
+                            {% if is_admin %}<th>Chủ sở hữu</th>{% endif %}
+                            <th>Hành động quản lý</th>
                         </tr>
                         {% for slug, info in my_apps.items() %}
                         <tr>
                             <td><b>{{ slug }}</b></td>
-                            <td><span style="color: #4ade80;">● Hoạt động 24/7</span></td>
+                            {% if is_admin %}<td><span style="color: #38bdf8;">{{ info.owner }}</span></td>{% endif %}
                             <td>
-                                <a href="/site/{{ slug }}/" target="_blank" class="btn-link" style="background: #0284c7; margin-right: 5px;">Mở Web</a>
-                                <a href="/delete/{{ slug }}" class="btn-link" style="background: #ef4444;">Xóa</a>
+                                <a href="/site/{{ slug }}/" target="_blank" class="btn-link" style="background: #0284c7;">Mở Web</a>
+                                {% if is_admin %}
+                                    <a href="/admin/code/{{ slug }}" class="btn-link" style="background: #eab308;">Xem Code</a>
+                                {% endif %}
+                                <a href="/delete/{{ slug }}" class="btn-link" style="background: #ef4444;" onclick="return confirm('Bạn có chắc chắn muốn xóa app này không?');">Xóa</a>
                             </td>
                         </tr>
                         {% endfor %}
                     </table>
                 {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Chưa có ứng dụng nào được xuất bản.</p>
+                    <p style="color: #94a3b8; text-align: center;">Chưa có ứng dụng nào trên hệ thống.</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -177,32 +182,35 @@ HOME_TEMPLATE = """
 </html>
 """
 
-USERS["admin@gmail.com"] = {"password": "adminpassword123"}
-
 @app.route('/')
 def index():
     user = session.get('user')
     if user:
-        my_apps = {slug: data for slug, data in CLOUD_APPS.items() if data['owner'] == user}
-        return render_template_string(HOME_TEMPLATE, my_apps=my_apps, default_code=DEFAULT_ISOLATED_CODE)
-    return render_template_string(HOME_TEMPLATE, default_code=DEFAULT_ISOLATED_CODE)
+        is_admin = USERS.get(user, {}).get("is_admin", False)
+        # Nếu là admin thì thấy toàn bộ app của tất cả mọi người, user thường chỉ thấy app của mình
+        if is_admin:
+            my_apps = CLOUD_APPS
+        else:
+            my_apps = {slug: data for slug, data in CLOUD_APPS.items() if data['owner'] == user}
+        return render_template_string(HOME_TEMPLATE, my_apps=my_apps, default_code=DEFAULT_ISOLATED_CODE, is_admin=is_admin)
+    return render_template_string(HOME_TEMPLATE, default_code=DEFAULT_ISOLATED_CODE, is_admin=False)
 
 @app.route('/auth', methods=['POST'])
 def auth():
-    email = request.form.get('email')
+    email = request.form.get('email').strip()
     password = request.form.get('password')
     action = request.form.get('action')
     
     if action == 'register':
         if email in USERS:
-            return render_template_string(HOME_TEMPLATE, error="Email đã tồn tại!", default_code=DEFAULT_ISOLATED_CODE)
-        USERS[email] = {"password": password}
+            return render_template_string(HOME_TEMPLATE, error="Tài khoản này đã tồn tại!", default_code=DEFAULT_ISOLATED_CODE, is_admin=False)
+        USERS[email] = {"password": password, "is_admin": False}
         session['user'] = email
     elif action == 'login':
         if email in USERS and USERS[email]["password"] == password:
             session['user'] = email
         else:
-            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!", default_code=DEFAULT_ISOLATED_CODE)
+            return render_template_string(HOME_TEMPLATE, error="Sai tài khoản hoặc mật khẩu!", default_code=DEFAULT_ISOLATED_CODE, is_admin=False)
     return redirect(url_for('index'))
 
 @app.route('/logout')
@@ -221,6 +229,9 @@ def deploy():
     
     if not slug:
         return "Tên đường dẫn không được để trống!", 400
+        
+    if slug in CLOUD_APPS:
+        return "Tên đường dẫn này đã có người sử dụng! Vui lòng chọn tên khác.", 400
         
     proj_folder = os.path.join(PROJECTS_DIR, slug)
     os.makedirs(proj_folder, exist_ok=True)
@@ -249,7 +260,6 @@ def site_handler(slug, subpath):
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         
-        # Kiểm tra linh hoạt các hàm hiển thị trong code của user
         if hasattr(mod, 'handle_request'):
             return mod.handle_request(request)
         elif hasattr(mod, 'index'):
@@ -261,10 +271,55 @@ def site_handler(slug, subpath):
     except Exception as e:
         return f"Lỗi thực thi mã nguồn: {str(e)}", 500
 
+# Tính năng độc quyền của Admin: Xem mã nguồn bất kỳ app nào
+@app.route('/admin/code/<slug>')
+def admin_view_code(slug):
+    user = session.get('user')
+    is_admin = USERS.get(user, {}).get("is_admin", False)
+    if not is_admin:
+        return "Bạn không có quyền truy cập tính năng này!", 403
+    if slug not in CLOUD_APPS:
+        return "App không tồn tại!", 404
+        
+    with open(CLOUD_APPS[slug]['path'], "r", encoding="utf-8") as f:
+        code_content = f.read()
+        
+    return render_template_string("""
+        <!DOCTYPE html>
+        <html lang="vi">
+        <head>
+            <meta charset="UTF-8">
+            <title>Xem Code: {{ slug }}</title>
+            <style>
+                body { background: #090d16; color: #fff; font-family: sans-serif; padding: 25px; margin: 0; display: flex; justify-content: center; }
+                .container { max-width: 900px; width: 100%; }
+                pre { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; overflow-x: auto; color: #38bdf8; font-family: monospace; font-size: 13px; line-height: 1.5; }
+                a { display: inline-block; background: #0284c7; color: #fff; padding: 10px 18px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-bottom: 20px; }
+                a:hover { background: #0369a1; }
+                h2 { color: #38bdf8; margin-top: 0; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <a href="/">⬅️ Quay lại trang quản lý</a>
+                <h2>📄 Mã Nguồn Project: <span style="color: #f8fafc;">{{ slug }}</span></h2>
+                <p style="color: #94a3b8;">Chủ sở hữu: <b>{{ owner }}</b></p>
+                <pre>{{ code }}</pre>
+            </div>
+        </body>
+        </html>
+    """, slug=slug, owner=CLOUD_APPS[slug]['owner'], code=code_content)
+
 @app.route('/delete/<slug>')
 def delete_app(slug):
     user = session.get('user')
-    if slug in CLOUD_APPS and CLOUD_APPS[slug]['owner'] == user:
+    if not user:
+        return redirect(url_for('index'))
+        
+    is_admin = USERS.get(user, {}).get("is_admin", False)
+    
+    # Admin có quyền xóa bất kỳ app nào, user thường chỉ được xóa app của chính mình
+    if slug in CLOUD_APPS and (is_admin or CLOUD_APPS[slug]['owner'] == user):
         try:
             shutil.rmtree(CLOUD_APPS[slug]['folder'], ignore_errors=True)
         except:
