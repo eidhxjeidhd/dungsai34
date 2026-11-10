@@ -1,31 +1,26 @@
 import os
-import importlib.util
 from flask import Flask, render_template_string, request, redirect, url_for, session
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Thư mục lưu trữ code trên Cloud
+# Thư mục lưu trữ mã nguồn trên Cloud
 CLOUD_STORAGE = "cloud_projects"
 os.makedirs(CLOUD_STORAGE, exist_ok=True)
 
-# Lưu bộ nhớ tạm các module đang chạy trên mây
-LOADED_MODULES = {}
+CLOUD_APPS = {}
 USERS = {}
 
-# Đoạn code Python mẫu chuẩn Cloud (dùng hàm render hoặc trả về giao diện trực tiếp)
-DEFAULT_CLOUD_CODE = """# Code Python chạy trực tiếp trên Cloud
-from flask import Blueprint, render_template_string
+# Đoạn code Python mẫu chuẩn để sẵn trong ô cho người dùng sửa hoặc copy
+DEFAULT_CLOUD_CODE = '''# Viết mã Python xử lý giao diện cho shop của bạn ở đây
+# Bạn có thể thay đổi trực tiếp chuỗi HTML_CODE bên dưới theo ý muốn
 
-# Tạo blueprint riêng cho shop của bạn
-bp = Blueprint('my_cloud_shop', __name__)
-
-HTML_CODE = '''
+HTML_CODE = """
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <title>Shop Cloud Của Tiến</title>
+    <title>Shop Của Tôi Trên Cloud</title>
     <style>
         body { background: #090d16; color: #fff; font-family: sans-serif; text-align: center; padding: 50px; }
         .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
@@ -35,17 +30,16 @@ HTML_CODE = '''
 </head>
 <body>
     <div class="box">
-        <h1>🚀 Shop Đang Chạy Trên Cloud!</h1>
-        <p>Ứng dụng này hoạt động 24/7 trên mây và đồng bộ toàn cầu.</p>
+        <h1>🚀 Chào Mừng Đến Với Shop Của Tôi!</h1>
+        <p>Trang web này chạy động bằng mã Python trên hệ thống Cloud 24/7.</p>
     </div>
 </body>
 </html>
-'''
-
-@bp.route('/')
-def index():
-    return render_template_string(HTML_CODE)
 """
+
+def render_page():
+    return HTML_CODE
+'''
 
 HOME_TEMPLATE = """
 <!DOCTYPE html>
@@ -99,13 +93,13 @@ HOME_TEMPLATE = """
 
             <div class="card">
                 <h2>☁️ Trình Triển Khai Code Python Lên Cloud</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Dán code Python (Blueprint) vào đây để xuất bản thẳng ra một đường link cloud công khai toàn cầu, hoạt động đồng bộ 24/7!</p>
+                <p style="color: #94a3b8; font-size: 14px;">Chỉnh sửa code Python mẫu bên dưới theo ý bạn, đặt tên đường dẫn và bấm xuất bản để nhận link công khai 24/7!</p>
                 
                 <form method="POST" action="/deploy_cloud">
                     <label>Tên Đường Dẫn (Slug - Viết liền không dấu):</label>
                     <input type="text" name="slug" placeholder="Ví dụ: shop-cua-toi..." required>
                     
-                    <label>Mã nguồn Python (.py) - Có sẵn mẫu:</label>
+                    <label>Mã nguồn Python (.py) - Có sẵn mẫu để sửa:</label>
                     <textarea name="py_code" required>{{ default_code }}</textarea>
 
                     <button type="submit" class="btn-success">🚀 Xuất Bản Lên Cloud Ngay</button>
@@ -142,8 +136,8 @@ HOME_TEMPLATE = """
 </html>
 """
 
+# Tài khoản mặc định để test nhanh
 USERS["admin@gmail.com"] = {"password": "adminpassword123"}
-CLOUD_APPS = {}
 
 @app.route('/')
 def index():
@@ -188,27 +182,37 @@ def deploy_cloud():
     if slug in CLOUD_APPS:
         return "Tên đường dẫn này đã tồn tại trên cloud! Hãy chọn tên khác.", 400
         
-    # Ghi file .py vào thư mục cloud
     file_path = os.path.join(CLOUD_STORAGE, f"{slug}.py")
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(py_code)
         
-    try:
-        # Nạp động module Python trực tiếp vào Flask app trên cloud
-        spec = importlib.util.spec_from_file_location(slug, file_path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        
-        # Đăng ký blueprint của user vào app chính với đường dẫn /site/<slug>/
-        if hasattr(mod, 'bp'):
-            app.register_blueprint(mod.bp, url_prefix=f'/site/{slug}')
-            CLOUD_APPS[slug] = {"owner": user, "path": file_path}
-        else:
-            return "Lỗi: Code Python phải chứa biến 'bp' (Blueprint) để tích hợp lên Cloud!", 400
-    except Exception as e:
-        return f"Lỗi cú pháp Python trên Cloud: {str(e)}", 500
-        
+    CLOUD_APPS[slug] = {"owner": user, "path": file_path}
     return redirect(url_for('index'))
+
+# Route tổng để điều phối và thực thi code Python của từng app con
+@app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST'])
+@app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST'])
+def render_cloud_site(slug, subpath):
+    if slug not in CLOUD_APPS:
+        return "Trang web cloud không tồn tại hoặc đã bị xóa!", 404
+        
+    file_path = CLOUD_APPS[slug]['path']
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            code_content = f.read()
+            
+        local_vars = {}
+        exec(code_content, local_vars)
+        
+        # Gọi hàm render_page() từ code Python của user để trả về giao diện
+        if 'render_page' in local_vars:
+            return local_vars['render_page']()
+        elif 'HTML_CODE' in local_vars:
+            return render_template_string(local_vars['HTML_CODE'])
+            
+        return "Ứng dụng Python đã chạy nhưng chưa cung cấp hàm render_page() hợp lệ.", 200
+    except Exception as e:
+        return f"Lỗi thực thi mã nguồn Python: {str(e)}", 500
 
 @app.route('/delete/<slug>')
 def delete_app(slug):
@@ -219,7 +223,6 @@ def delete_app(slug):
         except:
             pass
         del CLOUD_APPS[slug]
-        # Lưu ý: Flask không hỗ trợ unregister blueprint trực tiếp dễ dàng, nên khi xóa sẽ cần khởi động lại app nhẹ hoặc xóa khỏi danh sách quản lý.
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
