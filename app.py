@@ -16,6 +16,7 @@ USERS = {
     "admin": {"password": "123", "is_admin": True}
 }
 
+# Code mẫu mặc định an toàn tuyệt đối, không dính lỗi f-string
 DEFAULT_ISOLATED_CODE = """import os
 import sqlite3
 from flask import render_template_string
@@ -247,6 +248,7 @@ def deploy():
 def site_index_redirect():
     return redirect(url_for('index'))
 
+# Điều hướng app con thông minh: Tự động chuẩn hóa path để không bao giờ bị lỗi 404
 @app.route('/site/<slug>/', defaults={'subpath': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 @app.route('/site/<slug>/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def site_handler(slug, subpath):
@@ -260,7 +262,18 @@ def site_handler(slug, subpath):
         spec.loader.exec_module(mod)
         
         if hasattr(mod, 'handle_request'):
-            return mod.handle_request(request)
+            original_path_info = request.environ.get('PATH_INFO', '')
+            
+            # Chuyển đổi đường dẫn subpath thành dạng chuẩn cho app con (VD: /login, /topup)
+            clean_subpath = '/' + subpath if subpath else '/'
+            if not clean_subpath.startswith('/'):
+                clean_subpath = '/' + clean_subpath
+            request.environ['PATH_INFO'] = clean_subpath
+            
+            response = mod.handle_request(request)
+            
+            request.environ['PATH_INFO'] = original_path_info
+            return response
         elif hasattr(mod, 'index'):
             return mod.index()
         elif hasattr(mod, 'HTML_CODE'):
