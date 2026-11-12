@@ -1,4 +1,5 @@
 import os
+import sys
 import importlib.util
 import shutil
 import re
@@ -17,9 +18,12 @@ USERS = {
     "admin": {"password": "123", "is_admin": True}
 }
 
-# Code mẫu chuẩn chỉnh, an toàn cho app con
-DEFAULT_ISOLATED_CODE = """import os
+# Code mẫu chuẩn chỉnh hỗ trợ đa file, requests, pandas, sqlite,...
+DEFAULT_ISOLATED_CODE = """# === FILE: main.py ===
+import os
 import sqlite3
+import requests
+import pandas as pd
 from flask import render_template_string
 
 DB_FILE = os.path.join(os.path.dirname(__file__), 'shop_database.db')
@@ -47,42 +51,43 @@ def handle_request(req):
     items = c.fetchall()
     conn.close()
     
+    # Minh họa sử dụng pandas để tạo bảng thống kê nhanh
+    df = pd.DataFrame(items, columns=['ID', 'Nội dung']) if items else pd.DataFrame(columns=['ID', 'Nội dung'])
+    table_html = df.to_html(classes='table', index=False) if not df.empty else '<p>Chưa có dữ liệu.</p>'
+    
     html = '''
     <!DOCTYPE html>
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
-        <title>App Độc Lập Trên Cloud</title>
+        <title>App Đa Thư Viện Trên Cloud</title>
         <style>
             body { background: #090d16; color: #fff; font-family: sans-serif; text-align: center; padding: 40px; }
-            .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; width: 100%; max-width: 400px; box-sizing: border-box; text-align: left; }
+            .box { background: #1e293b; padding: 30px; border-radius: 16px; display: inline-block; border: 1px solid #334155; width: 100%; max-width: 500px; box-sizing: border-box; text-align: left; }
             input, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; box-sizing: border-box; }
             button { background: #16a34a; font-weight: bold; border: none; cursor: pointer; }
-            ul { list-style: none; padding: 0; margin-top: 20px; }
-            li { background: #0f172a; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #334155; }
+            table { width: 100%; margin-top: 15px; border-collapse: collapse; background: #0f172a; }
+            th, td { padding: 8px; border: 1px solid #334155; text-align: center; font-size: 14px; }
+            th { color: #38bdf8; }
         </style>
     </head>
     <body>
         <div style="display: flex; justify-content: center;">
             <div class="box">
-                <h2 style="color: #38bdf8; text-align: center; margin-top: 0;">🛍️ App Của Tôi</h2>
+                <h2 style="color: #38bdf8; text-align: center; margin-top: 0;">🚀 App Cloud Toàn Năng</h2>
                 <form method="POST">
                     <label>Nhập nội dung:</label>
                     <input type="text" name="item_name" placeholder="Ghi chú gì đó..." required>
                     <button type="submit">Lưu Vào Database</button>
                 </form>
-                <h3 style="margin-bottom: 5px;">Dữ Liệu Đã Lưu:</h3>
-                <ul>
-                    {% for item in items %}
-                        <li>📦 {{ item[1] }}</li>
-                    {% endfor %}
-                </ul>
+                <h3 style="margin-bottom: 5px; margin-top: 20px;">Dữ Liệu Thống Kê (Pandas):</h3>
+                {{ table_html | safe }}
             </div>
         </div>
     </body>
     </html>
     '''
-    return render_template_string(html, items=items)
+    return render_template_string(html, table_html=table_html)
 """
 
 HOME_TEMPLATE = """
@@ -91,7 +96,7 @@ HOME_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hệ Thống Cloud Tạo App Tự Động</title>
+    <title>Hệ Thống Cloud Platform</title>
     <style>
         body { background: #090d16; color: #f8fafc; font-family: sans-serif; margin: 0; padding: 15px; display: flex; justify-content: center; }
         .container { max-width: 850px; width: 100%; }
@@ -107,6 +112,7 @@ HOME_TEMPLATE = """
         th, td { padding: 12px; border-bottom: 1px solid #334155; text-align: left; }
         th { color: #94a3b8; }
         .badge-admin { background: #ef4444; color: white; padding: 3px 8px; border-radius: 6px; font-size: 11px; margin-left: 5px; }
+        .hint-box { background: #0f172a; border: 1px dashed #475569; padding: 12px; border-radius: 8px; font-size: 13px; color: #94a3b8; margin-bottom: 12px; }
     </style>
 </head>
 <body>
@@ -137,14 +143,16 @@ HOME_TEMPLATE = """
             </div>
 
             <div class="card">
-                <h2>⚡ Tạo & Triển Khai App Mới Lên Cloud</h2>
-                <p style="color: #94a3b8; font-size: 14px;">Dán mã nguồn Python tích hợp SQLite vào đây, đặt tên đường dẫn và bấm xuất bản!</p>
+                <h2>⚡ Tạo App Multi-File Lên Cloud</h2>
+                <div class="hint-box">
+                    💡 <b>Mẹo chia nhiều file:</b> Dùng cú pháp <code># === FILE: ten_file.py ===</code> để phân tách nhiều file trong cùng một ô soạn thảo. Các app con hoàn toàn được phép sử dụng mọi thư viện (requests, pandas, sqlite, v.v.).
+                </div>
                 
                 <form method="POST" action="/deploy">
                     <label>Tên Đường Dẫn (Slug - Viết liền không dấu):</label>
-                    <input type="text" name="slug" placeholder="Ví dụ: shopcua-toi..." required>
+                    <input type="text" name="slug" placeholder="Ví dụ: myapp..." required>
                     
-                    <label>Mã nguồn Python (.py):</label>
+                    <label>Mã nguồn dự án:</label>
                     <textarea name="py_code" required>{{ default_code }}</textarea>
 
                     <button type="submit" class="btn-success">🚀 Xuất Bản App Lên Cloud</button>
@@ -234,11 +242,23 @@ def deploy():
     proj_folder = os.path.join(PROJECTS_DIR, slug)
     os.makedirs(proj_folder, exist_ok=True)
     
-    file_path = os.path.join(proj_folder, "main.py")
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(py_code)
-        
-    CLOUD_APPS[slug] = {"owner": user, "path": file_path, "folder": proj_folder}
+    file_pattern = r"#\s*===\s*FILE:\s*([^\s=]+)\s*==="
+    parts = re.split(file_pattern, py_code)
+    
+    if len(parts) > 1:
+        for i in range(1, len(parts), 2):
+            filename = parts[i].strip()
+            content = parts[i+1].strip()
+            filename = os.path.basename(filename)
+            if filename:
+                with open(os.path.join(proj_folder, filename), "w", encoding="utf-8") as f:
+                    f.write(content)
+    else:
+        with open(os.path.join(proj_folder, "main.py"), "w", encoding="utf-8") as f:
+            f.write(py_code)
+            
+    main_file_path = os.path.join(proj_folder, "main.py")
+    CLOUD_APPS[slug] = {"owner": user, "path": main_file_path, "folder": proj_folder}
     return redirect(url_for('index'))
 
 @app.route('/site/')
@@ -246,13 +266,10 @@ def deploy():
 def site_index_redirect():
     return redirect(url_for('index'))
 
-# --- NÂNG CẤP HỆ THỐNG ĐIỀU HƯỚNG & VÁ LỖI ĐƯỜNG DẪN TỰ ĐỘNG ---
 def auto_fix_html_links(html_content, slug):
     if not isinstance(html_content, str):
         return html_content
     prefix = f"/site/{slug}/"
-    # Tự động thay thế các đường dẫn tuyệt đối bắt đầu bằng dấu / thành đường dẫn có chứa /site/<slug>/
-    # Giúp app con dùng href="/login" hay action="/topup" tự động chạy mượt mà không bao giờ 404
     html_content = re.sub(r'href=["\']/(?!/)', f'href="{prefix}', html_content)
     html_content = re.sub(r'action=["\']/(?!/)', f'action="{prefix}', html_content)
     return html_content
@@ -263,26 +280,27 @@ def site_handler(slug, subpath):
     if slug not in CLOUD_APPS:
         return "Trang web cloud không tồn tại hoặc đã bị xóa!", 404
         
-    file_path = CLOUD_APPS[slug]['path']
+    proj_info = CLOUD_APPS[slug]
+    file_path = proj_info['path']
+    proj_folder = proj_info['folder']
+    
     try:
+        if proj_folder not in sys.path:
+            sys.path.insert(0, proj_folder)
+            
         spec = importlib.util.spec_from_file_location(f"project_{slug}", file_path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         
         if hasattr(mod, 'handle_request'):
             original_path_info = request.environ.get('PATH_INFO', '')
-            
-            # Chuẩn hóa path truyền vào app con
             clean_subpath = '/' + subpath if subpath else '/'
             request.environ['PATH_INFO'] = clean_subpath
             
-            # Gọi hàm xử lý của app con
             response = mod.handle_request(request)
             
-            # Trả lại path gốc cho hệ thống
             request.environ['PATH_INFO'] = original_path_info
             
-            # Nếu response trả về là chuỗi HTML, tự động fix các đường dẫn liên kết
             if isinstance(response, str):
                 response = auto_fix_html_links(response, slug)
             
@@ -292,6 +310,9 @@ def site_handler(slug, subpath):
     except Exception as e:
         import traceback
         return f"<pre style='color: #f87171; background: #1e293b; padding: 20px; border-radius: 8px;'>Lỗi thực thi mã nguồn ứng dụng:\n{traceback.format_exc()}</pre>", 500
+    finally:
+        if proj_folder in sys.path:
+            sys.path.remove(proj_folder)
 
 @app.route('/admin/code/<slug>')
 def admin_view_code(slug):
@@ -302,8 +323,17 @@ def admin_view_code(slug):
     if slug not in CLOUD_APPS:
         return "App không tồn tại!", 404
         
-    with open(CLOUD_APPS[slug]['path'], "r", encoding="utf-8") as f:
-        code_content = f.read()
+    proj_folder = CLOUD_APPS[slug]['folder']
+    all_files_content = ""
+    if os.path.exists(proj_folder):
+        for filename in sorted(os.listdir(proj_folder)):
+            fpath = os.path.join(proj_folder, filename)
+            if os.path.isfile(fpath):
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        all_files_content += f"# === FILE: {filename} ===\n" + f.read() + "\n\n"
+                except:
+                    pass
         
     return render_template_string("""
         <!DOCTYPE html>
@@ -323,13 +353,13 @@ def admin_view_code(slug):
         <body>
             <div class="container">
                 <a href="/">⬅️ Quay lại trang quản lý</a>
-                <h2>📄 Mã Nguồn Project: <span style="color: #f8fafc;">{{ slug }}</span></h2>
+                <h2>📄 Mã Nguồn Dự Án: <span style="color: #f8fafc;">{{ slug }}</span></h2>
                 <p style="color: #94a3b8;">Chủ sở hữu: <b>{{ owner }}</b></p>
                 <pre>{{ code }}</pre>
             </div>
         </body>
         </html>
-    """, slug=slug, owner=CLOUD_APPS[slug]['owner'], code=code_content)
+    """, slug=slug, owner=CLOUD_APPS[slug]['owner'], code=all_files_content)
 
 @app.route('/delete/<slug>')
 def delete_app(slug):
