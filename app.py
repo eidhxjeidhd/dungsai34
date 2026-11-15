@@ -1,227 +1,142 @@
 import os
 import sqlite3
-import subprocess
-import threading
-from flask import Flask, render_template_string, request, redirect, url_for, session
+import uuid
+from flask import Flask, redirect, render_template_string, request, url_for
+from pyngrok import ngrok, conf
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_cloud_panel'
 
-DB_FILE = 'panel_database.db'
+# Tự động nhận diện Authtoken từ biến môi trường khi chạy lệnh
+auth_token = os.environ.get("NGROK_AUTHTOKEN")
+if auth_token:
+    conf.get_default().auth_token = auth_token
 
-# Lưu trữ tiến trình bot đang chạy theo bot_id: {'process': proc, 'logs': []}
-running_processes = {}
-process_locks = {}
-
+# Khởi tạo Database SQLite cục bộ trên Termux
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    password TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS bots (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER,
-                    name TEXT,
-                    code TEXT)''')
+    conn = sqlite3.connect('cloud.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            content TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
 init_db()
 
-def monitor_bot(bot_id, process):
-    for line in process.stdout:
-        if bot_id not in running_processes:
-            break
-        with process_locks[bot_id]:
-            running_processes[bot_id]['logs'].append(line)
-            if len(running_processes[bot_id]['logs']) > 150:
-                running_processes[bot_id]['logs'].pop(0)
+PUBLIC_URL = ""
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        conn = sqlite3.connect(DB_FILE)
-        c = conn.cursor()
-        c.execute("SELECT id, password FROM users WHERE username = ?", (username,))
-        user = c.fetchone()
-        conn.close()
-        if user and user[1] == password:
-            session['user_id'] = user[0]
-            session['username'] = username
-            return redirect(url_for('index'))
-        else:
-            error = "Tài khoản hoặc mật khẩu không chính xác!"
-    
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <title>Đăng Nhập - Cloud Bot Panel</title>
-        <style>
-            body { background: #090d16; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .box { background: #1e293b; padding: 30px; border-radius: 12px; width: 320px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-            h2 { color: #38bdf8; text-align: center; margin-top: 0; }
-            input { width: 100%; padding: 10px; margin: 10px 0; background: #0f172a; border: 1px solid #475569; color: #fff; border-radius: 6px; box-sizing: border-box; }
-            button { width: 100%; padding: 10px; background: #16a34a; border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px; }
-            button:hover { background: #15803d; }
-            .link { text-align: center; margin-top: 15px; font-size: 13px; }
-            .link a { color: #38bdf8; text-decoration: none; }
-            .error { color: #ef4444; font-size: 13px; text-align: center; margin-bottom: 10px; }
-        </style>
-    </head>
-    <body>
-        <div class="box">
-            <h2>🔑 Đăng Nhập</h2>
-            {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            <form method="POST">
-                <input type="text" name="username" placeholder="Tên đăng nhập" required>
-                <input type="password" name="password" placeholder="Mật khẩu" required>
-                <button type="submit">Đăng Nhập</button>
-            </form>
-            <div class="link">Chưa có tài khoản? <a href="/register">Đăng ký ngay</a></div>
+HOME_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Termux Auto Cloud</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 500px; width: 90%; border: 1px solid #334155; }
+        h2 { color: #38bdf8; margin-top: 0; text-align: center; }
+        textarea { width: 100%; height: 100px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; padding: 10px; border-radius: 8px; box-sizing: border-box; resize: vertical; font-size: 14px; }
+        button { background: #0284c7; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 15px; font-size: 16px; }
+        button:hover { background: #0ea5e9; }
+        .result { margin-top: 20px; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; word-break: break-all; }
+        a { color: #38bdf8; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .public-badge { background: #065f46; color: #34d399; padding: 6px 10px; border-radius: 8px; font-size: 12px; margin-bottom: 15px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>☁️ Termux Auto Cloud</h2>
+        <div class="public-badge">🌐 Đang mở online qua Ngrok</div>
+        <form action="/add" method="POST">
+            <textarea name="content" placeholder="Nhập nội dung cần lưu trữ vào đây..." required></textarea>
+            <button type="submit">Tạo Link Lưu Trữ</button>
+        </form>
+        {% if link %}
+        <div class="result">
+            <p style="margin:0 0 5px 0; color:#94a3b8; font-size:13px;">Đã tạo link thành công:</p>
+            <a href="{{ link }}" target="_blank">{{ link }}</a>
         </div>
-    </body>
-    </html>
-    ''', error=error)
+        {% endif %}
+    </div>
+</body>
+</html>
+"""
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    error = None
-    success = None
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        try:
-            conn = sqlite3.connect(DB_FILE)
-            c = conn.cursor()
-            c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, password))
-            conn.commit()
-            conn.close()
-            success = "Đăng ký thành công! Hãy đăng nhập."
-        except sqlite3.IntegrityError:
-            error = "Tên đăng nhập đã tồn tại!"
-            
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <title>Đăng Ký - Cloud Bot Panel</title>
-        <style>
-            body { background: #090d16; color: #fff; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-            .box { background: #1e293b; padding: 30px; border-radius: 12px; width: 320px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-            h2 { color: #38bdf8; text-align: center; margin-top: 0; }
-            input { width: 100%; padding: 10px; margin: 10px 0; background: #0f172a; border: 1px solid #475569; color: #fff; border-radius: 6px; box-sizing: border-box; }
-            button { width: 100%; padding: 10px; background: #2563eb; border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 10px; }
-            button:hover { background: #1d4ed8; }
-            .link { text-align: center; margin-top: 15px; font-size: 13px; }
-            .link a { color: #38bdf8; text-decoration: none; }
-            .error { color: #ef4444; font-size: 13px; text-align: center; margin-bottom: 10px; }
-            .success { color: #22c55e; font-size: 13px; text-align: center; margin-bottom: 10px; }
-        </style>
-    </head>
-    <body>
-        <div class="box">
-            <h2>📝 Đăng Ký</h2>
-            {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            {% if success %}<div class="success">{{ success }}</div>{% endif %}
-            <form method="POST">
-                <input type="text" name="username" placeholder="Tên đăng nhập" required>
-                <input type="password" name="password" placeholder="Mật khẩu" required>
-                <button type="submit">Đăng Ký</button>
-            </form>
-            <div class="link">Đã có tài khoản? <a href="/login">Đăng nhập</a></div>
-        </div>
-    </body>
-    </html>
-    ''', error=error, success=success)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
+VIEW_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xem Nội Dung - Cloud</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 600px; width: 90%; border: 1px solid #334155; word-break: break-word; }
+        h2 { color: #38bdf8; margin-top: 0; }
+        pre { white-space: pre-wrap; background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155; color: #e2e8f0; font-family: monospace; font-size: 14px; }
+        .back { display: inline-block; margin-top: 15px; color: #38bdf8; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📄 Nội Dung Lưu Trữ</h2>
+        <pre>{{ content }}</pre>
+        <a class="back" href="/">← Quay lại trang chủ</a>
+    </div>
+</body>
+</html>
+"""
 
 @app.route('/')
-def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+def home():
+    return render_template_string(HOME_TEMPLATE, link=None)
+
+@app.route('/add', methods=['POST'])
+def add_content():
+    content = request.form.get('content')
+    if not content:
+        return redirect(url_for('home'))
+        
+    code = str(uuid.uuid4())[:6]
     
-    user_id = session['user_id']
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id, name FROM bots WHERE user_id = ?", (user_id,))
-    bots = c.fetchall()
+    conn = sqlite3.connect('cloud.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO links (code, content) VALUES (?, ?)', (code, content))
+    conn.commit()
     conn.close()
     
-    return render_template_string('''
-    <!DOCTYPE html>
-    <html lang="vi">
-    <head>
-        <meta charset="UTF-8">
-        <title>Quản Lý Bot - Cloud Panel</title>
-        <style>
-            body { background: #090d16; color: #fff; font-family: sans-serif; padding: 20px; margin: 0; }
-            .container { max-width: 900px; margin: auto; }
-            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e293b; padding-bottom: 15px; margin-bottom: 20px; }
-            h1 { color: #38bdf8; margin: 0; font-size: 22px; }
-            .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-            input, button { padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #fff; }
-            button { background: #16a34a; font-weight: bold; cursor: pointer; border: none; }
-            button:hover { background: #15803d; }
-            .bot-item { display: flex; justify-content: space-between; align-items: center; background: #0f172a; padding: 12px 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #334155; }
-            .bot-actions a { color: #38bdf8; text-decoration: none; margin-right: 15px; font-weight: bold; }
-            .bot-actions a.delete { color: #ef4444; }
-            .logout { background: #dc2626; color: #fff; padding: 8px 15px; border-radius: 6px; text-decoration: none; font-size: 13px; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>🤖 Danh Sách Bot Của Bạn ({{ session['username'] }})</h1>
-                <a href="/logout" class="logout">Đăng Xuất</a>
-            </div>
+    link = f"{PUBLIC_URL}/s/{code}"
+    return render_template_string(HOME_TEMPLATE, link=link)
 
-            <!-- Tạo bot mới -->
-            <div class="card">
-                <h3>➕ Tạo Bot Mới</h3>
-                <form action="/create_bot" method="POST" style="display: flex; gap: 10px;">
-                    <input type="text" name="bot_name" placeholder="Nhập tên bot của bạn..." required style="flex: 1;">
-                    <button type="submit">Tạo Bot</button>
-                </form>
-            </div>
+@app.route('/s/<code>')
+def view_content(code):
+    conn = sqlite3.connect('cloud.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT content FROM links WHERE code = ?', (code,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return render_template_string(VIEW_TEMPLATE, content=row[0])
+    else:
+        return "<h2 style='text-align:center; color:#ef4444; margin-top:50px; font-family:sans-serif;'>❌ Link không tồn tại hoặc đã bị xóa!</h2>", 404
 
-            <!-- Danh sách các bot -->
-            <div class="card">
-                <h3>📋 Tất Cả Các Bot Đã Tạo</h3>
-                {% if bots %}
-                    {% for bot in bots %}
-                    <div class="bot-item">
-                        <span>🤖 <b>{{ bot[1] }}</b></span>
-                        <div class="bot-actions">
-                            <a href="/bot/{{ bot[0] }}">⚙️ Quản lý & Code</a>
-                            <a href="/delete_bot/{{ bot[0] }}" class="delete" onclick="return confirm('Bạn có chắc muốn xóa bot này?')">🗑️ Xóa</a>
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p style="color: #94a3b8; text-align: center;">Bạn chưa tạo con bot nào cả. Hãy tạo ngay một bot ở trên!</p>
-                {% endif %}
-            </div>
-        </div>
-    </body>
-    </html>
-    ''', bots=bots)
-
-@app.route('/create_bot', methods=['POST'])
-def create_bot():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+if __name__ == '__main__':
+    public_url = ngrok.connect(5000)
+    PUBLIC_URL = str(public_url).split('"')[1]
+    
+    print(f"\n==============================================")
+    print(f"🌐 LINK TRANG CHỦ CÔNG KHAI: {PUBLIC_URL}")
+    print(f"==============================================\n")
+    
+    app.run(host='0.0.0.0', port=5000)
+irect(url_for('login'))
     bot_name = request.form.get('bot_name')
     user_id = session['user_id']
     
