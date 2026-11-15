@@ -153,19 +153,19 @@ def login():
         else:
             error = "⚠️ Tài khoản hoặc mật khẩu không chính xác!"
     
-    return render_template_string(f'''
+    return render_template_string('''
     <!DOCTYPE html>
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
         <title>Đăng Nhập - Rainbow Cloud Panel</title>
-        {GLOBAL_STYLE}
-        <style>body {{ display: flex; justify-content: center; align-items: center; }} .box {{ width: 350px; }}</style>
+        ''' + GLOBAL_STYLE + '''
+        <style>body { display: flex; justify-content: center; align-items: center; } .box { width: 350px; }</style>
     </head>
     <body>
         <div class="box">
             <h2>🔑 Đăng Nhập Hệ Thống</h2>
-            {{% if error %}}<div class="error">{{{{ error }}}}</div>{{% endif %}}
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
             <form method="POST">
                 <input type="text" name="username" placeholder="Tên đăng nhập" required>
                 <input type="password" name="password" placeholder="Mật khẩu" required>
@@ -194,20 +194,20 @@ def register():
         except sqlite3.IntegrityError:
             error = "⚠️ Tên đăng nhập đã tồn tại!"
             
-    return render_template_string(f'''
+    return render_template_string('''
     <!DOCTYPE html>
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
         <title>Đăng Ký - Rainbow Cloud Panel</title>
-        {GLOBAL_STYLE}
-        <style>body {{ display: flex; justify-content: center; align-items: center; }} .box {{ width: 350px; }}</style>
+        ''' + GLOBAL_STYLE + '''
+        <style>body { display: flex; justify-content: center; align-items: center; } .box { width: 350px; }</style>
     </head>
     <body>
         <div class="box">
             <h2>📝 Đăng Ký Tài Khoản</h2>
-            {{% if error %}}<div class="error">{{{{ error }}}}</div>{{% endif %}}
-            {{% if success %}}<div class="success">{{{{ success }}}}</div>{{% endif %}}
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            {% if success %}<div class="success">{{ success }}</div>{% endif %}
             <form method="POST">
                 <input type="text" name="username" placeholder="Tên đăng nhập" required>
                 <input type="password" name="password" placeholder="Mật khẩu" required>
@@ -236,20 +236,20 @@ def index():
     bots = c.fetchall()
     conn.close()
     
-    return render_template_string(f'''
+    return render_template_string('''
     <!DOCTYPE html>
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
         <title>Quản Lý Bot - Rainbow Cloud Panel</title>
-        {GLOBAL_STYLE}
+        ''' + GLOBAL_STYLE + '''
         <style>
-            .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 25px; }}
-            .bot-item {{ display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.9); padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }}
-            .bot-item:hover {{ border-color: #00ffcc; box-shadow: 0 0 15px rgba(0,255,204,0.3); }}
-            .bot-actions a {{ color: #00ffcc; text-decoration: none; margin-right: 15px; font-weight: bold; }}
-            .bot-actions a.delete {{ color: #ff3366; }}
-            .logout-btn {{ background: linear-gradient(45deg, #ff0055, #ff3366); width: auto; padding: 8px 20px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: bold; font-size: 13px; display: inline-block; }}
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 25px; }
+            .bot-item { display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.9); padding: 15px 20px; border-radius: 12px; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.2); transition: 0.3s; }
+            .bot-item:hover { border-color: #00ffcc; box-shadow: 0 0 15px rgba(0,255,204,0.3); }
+            .bot-actions a { color: #00ffcc; text-decoration: none; margin-right: 15px; font-weight: bold; }
+            .bot-actions a.delete { color: #ff3366; }
+            .logout-btn { background: linear-gradient(45deg, #ff0055, #ff3366); width: auto; padding: 8px 20px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: bold; font-size: 13px; display: inline-block; }
         </style>
     </head>
     <body>
@@ -271,24 +271,24 @@ def index():
             <!-- Danh sách các bot -->
             <div class="card">
                 <h3>📋 Danh Sách Bot Đang Quản Lý</h3>
-                {{% if bots %}}
-                    {{% for bot in bots %}}
+                {% if bots %}
+                    {% for bot in bots %}
                     <div class="bot-item">
-                        <span>🤖 <b style="font-size: 16px;">{{{{ bot[1] }}}}</b></span>
+                        <span>🤖 <b style="font-size: 16px;">{{ bot[1] }}</b></span>
                         <div class="bot-actions">
-                            <a href="/bot/{{{{ bot[0] }}}}">⚙️ Quản Lý & Code</a>
-                            <a href="/delete_bot/{{{{ bot[0] }}}}" class="delete" onclick="return confirm('Bạn có chắc muốn xóa bot này?')">🗑️ Xóa</a>
+                            <a href="/bot/{{ bot[0] }}">⚙️ Quản Lý & Code</a>
+                            <a href="/delete_bot/{{ bot[0] }}" class="delete" onclick="return confirm('Bạn có chắc muốn xóa bot này?')">🗑️ Xóa</a>
                         </div>
                     </div>
-                    {{% endfor %}}
-                {{% else %}}
+                    {% endfor %}
+                {% else %}
                     <p style="color: #94a3b8; text-align: center; padding: 20px;">Chưa có con bot nào cả. Hãy tạo ngay một bot ở khung phía trên nhé! ✨</p>
-                {{% endif %}}
+                {% endif %}
             </div>
         </div>
     </body>
     </html>
-    ''', bots=bots)
+    ''', bots=bots, session=session)
 
 @app.route('/create_bot', methods=['POST'])
 def create_bot():
@@ -443,28 +443,28 @@ def manage_bot(bot_id):
     is_running = bot_id in running_processes and running_processes[bot_id]['process'].poll() is None
     logs = running_processes[bot_id]['logs'] if bot_id in running_processes else ["--- Bot chưa được khởi động hoặc đã dừng ---"]
 
-    return render_template_string(f'''
+    return render_template_string('''
     <!DOCTYPE html>
     <html lang="vi">
     <head>
         <meta charset="UTF-8">
-        <title>Quản Lý: {{{{ bot[1] }}}} - Rainbow Panel</title>
-        {GLOBAL_STYLE}
+        <title>Quản Lý: {{ bot[1] }} - Rainbow Panel</title>
+        ''' + GLOBAL_STYLE + '''
         <style>
-            .header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; }}
-            .status-badge {{ padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 13px; }}
-            .running {{ background: #00ffcc; color: #000; box-shadow: 0 0 15px rgba(0,255,204,0.6); }}
-            .stopped {{ background: #ff3366; color: #fff; box-shadow: 0 0 15px rgba(255,51,102,0.6); }}
-            .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
-            .card {{ display: flex; flex-direction: column; }}
-            textarea {{ width: 100%; height: 380px; background: rgba(10, 15, 30, 0.95); color: #00ffcc; border: 1px solid #475569; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 13px; box-sizing: border-box; resize: vertical; outline: none; }}
-            textarea:focus {{ border-color: #ff0055; box-shadow: 0 0 10px rgba(255,0,85,0.4); }}
-            pre.logs {{ width: 100%; height: 380px; background: rgba(10, 15, 30, 0.95); color: #00ff66; border: 1px solid #475569; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 13px; box-sizing: border-box; margin: 0; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }}
-            .btn-group {{ margin-top: 15px; display: flex; gap: 10px; }}
-            .btn-group button {{ margin-top: 0; flex: 1; }}
-            .alert {{ background: rgba(0, 150, 255, 0.2); border: 1px solid #0099ff; color: #fff; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; backdrop-filter: blur(5px); }}
-            .back {{ color: #00ffcc; text-decoration: none; font-weight: bold; font-size: 14px; }}
-            .back:hover {{ text-decoration: underline; }}
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 15px; margin-bottom: 20px; }
+            .status-badge { padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 13px; }
+            .running { background: #00ffcc; color: #000; box-shadow: 0 0 15px rgba(0,255,204,0.6); }
+            .stopped { background: #ff3366; color: #fff; box-shadow: 0 0 15px rgba(255,51,102,0.6); }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .card { display: flex; flex-direction: column; }
+            textarea { width: 100%; height: 380px; background: rgba(10, 15, 30, 0.95); color: #00ffcc; border: 1px solid #475569; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 13px; box-sizing: border-box; resize: vertical; outline: none; }
+            textarea:focus { border-color: #ff0055; box-shadow: 0 0 10px rgba(255,0,85,0.4); }
+            pre.logs { width: 100%; height: 380px; background: rgba(10, 15, 30, 0.95); color: #00ff66; border: 1px solid #475569; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 13px; box-sizing: border-box; margin: 0; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word; }
+            .btn-group { margin-top: 15px; display: flex; gap: 10px; }
+            .btn-group button { margin-top: 0; flex: 1; }
+            .alert { background: rgba(0, 150, 255, 0.2); border: 1px solid #0099ff; color: #fff; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; backdrop-filter: blur(5px); }
+            .back { color: #00ffcc; text-decoration: none; font-weight: bold; font-size: 14px; }
+            .back:hover { text-decoration: underline; }
         </style>
     </head>
     <body>
@@ -472,27 +472,27 @@ def manage_bot(bot_id):
             <div class="header">
                 <div>
                     <a href="/" class="back">← Quay lại danh sách</a>
-                    <h1 style="display:inline-block; margin-left:15px; font-size: 22px;">⚙️ Quản lý: {{{{ bot[1] }}}}</h1>
+                    <h1 style="display:inline-block; margin-left:15px; font-size: 22px;">⚙️ Quản lý: {{ bot[1] }}</h1>
                 </div>
                 <div>
-                    {{% if is_running %}}
+                    {% if is_running %}
                         <span class="status-badge running">● Đang Chạy</span>
-                    {{% else %}}
+                    {% else %}
                         <span class="status-badge stopped">■ Đã Dừng</span>
-                    {{% endif %}}
+                    {% endif %}
                 </div>
             </div>
 
-            {{% if message %}}
-                <div class="alert">{{{{ message }}}}</div>
-            {{% endif %}}
+            {% if message %}
+                <div class="alert">{{ message }}</div>
+            {% endif %}
 
             <div class="grid">
                 <!-- Cột 1: Soạn thảo code -->
                 <div class="card">
                     <h3>📝 Trình Soạn Thảo Code Python</h3>
                     <form method="POST">
-                        <textarea name="code_content" spellcheck="false">{{{{ bot[2] }}}}</textarea>
+                        <textarea name="code_content" spellcheck="false">{{ bot[2] }}</textarea>
                         <div class="btn-group">
                             <button type="submit" name="action" value="save" style="background: linear-gradient(45deg, #0066ff, #00ccff);">💾 Chỉ Lưu</button>
                             <button type="submit" name="action" value="save_and_run" style="background: linear-gradient(45deg, #00ff66, #009933);">🚀 Lưu & Chạy</button>
@@ -507,7 +507,7 @@ def manage_bot(bot_id):
                         📊 Nhật Ký Hoạt Động (Logs)
                         <button onclick="location.reload()" style="width: auto; padding: 4px 12px; font-size: 11px; margin-top:0;">🔄 Làm mới</button>
                     </h3>
-                    <pre class="logs" id="logBox">{{% for line in logs %}}{{{{ line }}}}{% endfor %}</pre>
+                    <pre class="logs" id="logBox">{% for line in logs %}{{ line }}{% endfor %}</pre>
                 </div>
             </div>
         </div>
